@@ -60,6 +60,12 @@ No Prism dependency.
     backend and settled only on `ok`. Then the new message starts, not queues.
 14. **A typed decision's message is `decided`**, a final delivery state, so it can
     never be delivered to the agent afterwards.
+15. **Every append path checks HITL records.** `appendAs` validates an
+    `approval.requested` / `question.asked` (shape, option kinds, preview parts as
+    the appender's origin), stamps its turn, and refuses an id used in ANY thread:
+    decisions are routed by id. `append()` (the host's) and a backend's go through it.
+16. **A resume carries every decided approval and answered question of its turn**
+    (`TurnInput::$approvals` / `$questions`), not only the one that triggered it.
 
 ## Known limits
 
