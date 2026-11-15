@@ -1,0 +1,13 @@
+<?php
+
+namespace Negative;
+
+use Prism\Prism\Prism;
+
+final class Adapter
+{
+    public function make(): string
+    {
+        return 'ParticleAcademy\PrismHarness\Harness';
+    }
+}

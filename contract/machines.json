@@ -1,0 +1,74 @@
+{
+  "v": 1,
+  "turn": {
+    "initial": "pending",
+    "states": ["pending", "running", "awaiting-human", "cancelling", "settled"],
+    "outcomes": ["completed", "failed", "refused", "cancelled", "interrupted"],
+    "transitions": [
+      { "from": "pending", "action": "start", "to": "running" },
+      { "from": "running", "action": "park", "to": "awaiting-human" },
+      { "from": "awaiting-human", "action": "resume", "to": "running" },
+      { "from": "pending", "action": "cancel", "to": "cancelling" },
+      { "from": "running", "action": "cancel", "to": "cancelling" },
+      { "from": "awaiting-human", "action": "cancel", "to": "cancelling" },
+      { "from": "cancelling", "action": "cancelled", "to": "settled", "outcome": "cancelled" },
+      { "from": "cancelling", "action": "interrupted", "to": "settled", "outcome": "interrupted" },
+      { "from": "running", "action": "finish", "to": "settled", "outcome": "completed" },
+      { "from": "running", "action": "fail", "to": "settled", "outcome": "failed" },
+      { "from": "running", "action": "refuse", "to": "settled", "outcome": "refused" },
+      { "from": "pending", "action": "fail", "to": "settled", "outcome": "failed" },
+      { "from": "pending", "action": "reap", "to": "settled", "outcome": "failed", "reason": "stalled" },
+      { "from": "running", "action": "reap", "to": "settled", "outcome": "failed", "reason": "stalled" },
+      { "from": "awaiting-human", "action": "reap", "to": "settled", "outcome": "failed", "reason": "stalled" },
+      { "from": "cancelling", "action": "reap", "to": "settled", "outcome": "failed", "reason": "stalled" }
+    ]
+  },
+  "delivery": {
+    "initial": "sending",
+    "states": ["sending", "sent", "queued", "steered", "delivered", "failed", "dropped", "unsent"],
+    "final": ["steered", "delivered", "failed", "dropped", "unsent"],
+    "transitions": [
+      { "from": "sending", "action": "ack", "to": "sent" },
+      { "from": "sending", "action": "fail", "to": "failed" },
+      { "from": "sent", "action": "queue", "to": "queued" },
+      { "from": "sent", "action": "steer", "to": "steered" },
+      { "from": "sent", "action": "deliver", "to": "delivered" },
+      { "from": "sent", "action": "drop", "to": "dropped" },
+      { "from": "queued", "action": "steer", "to": "steered" },
+      { "from": "queued", "action": "deliver", "to": "delivered" },
+      { "from": "queued", "action": "drop", "to": "dropped" },
+      { "from": "queued", "action": "unsend", "to": "unsent" }
+    ]
+  },
+  "approval": {
+    "initial": "pending",
+    "states": ["pending", "deciding", "approved", "rejected", "edited", "applied", "apply-failed", "withdrawn", "expired"],
+    "final": ["rejected", "applied", "apply-failed", "withdrawn", "expired"],
+    "actionable": ["pending"],
+    "transitions": [
+      { "from": "pending", "action": "begin-decision", "to": "deciding" },
+      { "from": "deciding", "action": "decision-failed", "to": "pending" },
+      { "from": "deciding", "action": "approve", "to": "approved" },
+      { "from": "deciding", "action": "reject", "to": "rejected" },
+      { "from": "deciding", "action": "edit", "to": "edited" },
+      { "from": "approved", "action": "apply", "to": "applied" },
+      { "from": "edited", "action": "apply", "to": "applied" },
+      { "from": "approved", "action": "apply-fail", "to": "apply-failed" },
+      { "from": "edited", "action": "apply-fail", "to": "apply-failed" },
+      { "from": "pending", "action": "withdraw", "to": "withdrawn" },
+      { "from": "pending", "action": "expire", "to": "expired" }
+    ]
+  },
+  "reservedTools": {
+    "about": "Tool names an agent may never be offered or call: they are the human's confirmation channel. Matched case-insensitively.",
+    "exact": ["question_answer", "send_as_human"],
+    "contains": ["approv", "confirm", "permission", "decide"]
+  },
+  "optionKinds": {
+    "allow-once": { "tone": "positive", "decision": "approve" },
+    "allow-always": { "tone": "positive", "decision": "approve" },
+    "reject-once": { "tone": "negative", "decision": "reject" },
+    "reject-always": { "tone": "negative", "decision": "reject" },
+    "edit": { "tone": "neutral", "decision": "edit" }
+  }
+}

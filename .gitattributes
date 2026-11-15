@@ -1,0 +1,2 @@
+conformance/*.json text eol=lf
+contract/*.json text eol=lf

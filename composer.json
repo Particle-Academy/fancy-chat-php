@@ -1,0 +1,80 @@
+{
+    "name": "particle-academy/fancy-chat-php",
+    "description": "Laravel server for the neutral agent-chat contract: an append-only thread log with an atomic, gapless seq, SSE plus long-poll with resumable replay, the turn machine, staged writes and decision endpoints that accept human actors only. Provider-neutral, no Prism dependency. Twin of @particle-academy/fancy-chat-js.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "laravel",
+        "agent",
+        "chat",
+        "human-in-the-loop",
+        "hitl",
+        "sse",
+        "long-poll",
+        "event-sourcing",
+        "human-plus",
+        "fancy",
+        "particle-academy"
+    ],
+    "homepage": "https://github.com/Particle-Academy/fancy-chat-php",
+    "support": {
+        "issues": "https://github.com/Particle-Academy/fancy-chat-php/issues",
+        "source": "https://github.com/Particle-Academy/fancy-chat-php"
+    },
+    "authors": [
+        {
+            "name": "Particle Academy",
+            "homepage": "https://github.com/Particle-Academy"
+        }
+    ],
+    "require": {
+        "php": "^8.4",
+        "ext-json": "*",
+        "ext-mbstring": "*",
+        "illuminate/broadcasting": "^13.0",
+        "illuminate/bus": "^13.0",
+        "illuminate/console": "^13.0",
+        "illuminate/contracts": "^13.0",
+        "illuminate/database": "^13.0",
+        "illuminate/http": "^13.0",
+        "illuminate/queue": "^13.0",
+        "illuminate/routing": "^13.0",
+        "illuminate/support": "^13.0"
+    },
+    "require-dev": {
+        "laravel/framework": "^13.30",
+        "pestphp/pest": "^5.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "FancyChat\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "FancyChat\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "pest",
+        "lint": "@php tests/lint.php"
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "FancyChat\\FancyChatServiceProvider"
+            ],
+            "aliases": {
+                "FancyChat": "FancyChat\\Facades\\FancyChat"
+            }
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        },
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

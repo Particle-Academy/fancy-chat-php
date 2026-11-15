@@ -1,0 +1,367 @@
+{
+  "v": 1,
+  "about": "Shared conformance cases for the agent chat contract v1. Byte-identical in fancy-chat-js and fancy-chat-php; each leg pins its sha256. A section lists the legs that must pass it.",
+  "envelope": {
+    "legs": ["js", "php"],
+    "cases": [
+      { "name": "minimal core event", "event": { "v": 1, "seq": 1, "threadId": "t_1", "at": "2026-11-15T10:00:00.000Z", "type": "turn.started", "actor": { "kind": "system", "id": "server" }, "data": { "turnId": "u_1" } }, "ok": true, "error": null },
+      { "name": "unknown fields are ignored", "event": { "v": 1, "seq": 2, "threadId": "t_1", "at": "2026-11-15T10:00:00.000Z", "type": "usage", "actor": { "kind": "agent", "id": "a" }, "data": {}, "futureField": { "x": 1 } }, "ok": true, "error": null },
+      { "name": "app extension type", "event": { "v": 1, "seq": 3, "threadId": "t_1", "at": "2026-11-15T10:00:00.000Z", "type": "x-moic.deal-updated", "actor": { "kind": "agent", "id": "a" }, "data": {} }, "ok": true, "error": null },
+      { "name": "unknown major is refused", "event": { "v": 2, "seq": 1, "threadId": "t_1", "at": "2026-11-15T10:00:00.000Z", "type": "usage", "actor": { "kind": "agent", "id": "a" }, "data": {} }, "ok": false, "error": "contract.version" },
+      { "name": "missing version is refused", "event": { "seq": 1, "threadId": "t_1", "at": "2026-11-15T10:00:00.000Z", "type": "usage", "actor": { "kind": "agent", "id": "a" }, "data": {} }, "ok": false, "error": "contract.version" },
+      { "name": "seq must be a positive integer", "event": { "v": 1, "seq": 0, "threadId": "t_1", "at": "2026-11-15T10:00:00.000Z", "type": "usage", "actor": { "kind": "agent", "id": "a" }, "data": {} }, "ok": false, "error": "event.seq" },
+      { "name": "fractional seq", "event": { "v": 1, "seq": 1.5, "threadId": "t_1", "at": "2026-11-15T10:00:00.000Z", "type": "usage", "actor": { "kind": "agent", "id": "a" }, "data": {} }, "ok": false, "error": "event.seq" },
+      { "name": "empty thread id", "event": { "v": 1, "seq": 1, "threadId": "", "at": "2026-11-15T10:00:00.000Z", "type": "usage", "actor": { "kind": "agent", "id": "a" }, "data": {} }, "ok": false, "error": "event.threadId" },
+      { "name": "type outside the closed set", "event": { "v": 1, "seq": 1, "threadId": "t_1", "at": "2026-11-15T10:00:00.000Z", "type": "message.exploded", "actor": { "kind": "agent", "id": "a" }, "data": {} }, "ok": false, "error": "event.type" },
+      { "name": "extension without a namespace", "event": { "v": 1, "seq": 1, "threadId": "t_1", "at": "2026-11-15T10:00:00.000Z", "type": "x-deal", "actor": { "kind": "agent", "id": "a" }, "data": {} }, "ok": false, "error": "event.type" },
+      { "name": "bad timestamp", "event": { "v": 1, "seq": 1, "threadId": "t_1", "at": "yesterday", "type": "usage", "actor": { "kind": "agent", "id": "a" }, "data": {} }, "ok": false, "error": "event.at" },
+      { "name": "unknown actor kind", "event": { "v": 1, "seq": 1, "threadId": "t_1", "at": "2026-11-15T10:00:00.000Z", "type": "usage", "actor": { "kind": "robot", "id": "a" }, "data": {} }, "ok": false, "error": "event.actor" },
+      { "name": "data must be an object", "event": { "v": 1, "seq": 1, "threadId": "t_1", "at": "2026-11-15T10:00:00.000Z", "type": "usage", "actor": { "kind": "agent", "id": "a" }, "data": [1, 2] }, "ok": false, "error": "event.data" },
+      { "name": "run ids may be null", "event": { "v": 1, "seq": 1, "threadId": "t_1", "runId": null, "parentRunId": null, "rootRunId": null, "turnId": null, "at": "2026-11-15T10:00:00.000Z", "type": "run.started", "actor": { "kind": "agent", "id": "a" }, "data": {} }, "ok": true, "error": null },
+      { "name": "run id must be a string", "event": { "v": 1, "seq": 1, "threadId": "t_1", "runId": 9, "at": "2026-11-15T10:00:00.000Z", "type": "run.started", "actor": { "kind": "agent", "id": "a" }, "data": {} }, "ok": false, "error": "event.runId" }
+    ]
+  },
+  "turn": {
+    "legs": ["js", "php"],
+    "cases": [
+      { "from": "pending", "action": "start", "ok": true, "to": "running", "outcome": null, "reason": null },
+      { "from": "running", "action": "park", "ok": true, "to": "awaiting-human", "outcome": null, "reason": null },
+      { "from": "awaiting-human", "action": "resume", "ok": true, "to": "running", "outcome": null, "reason": null },
+      { "from": "running", "action": "cancel", "ok": true, "to": "cancelling", "outcome": null, "reason": null },
+      { "from": "awaiting-human", "action": "cancel", "ok": true, "to": "cancelling", "outcome": null, "reason": null },
+      { "from": "cancelling", "action": "cancelled", "ok": true, "to": "settled", "outcome": "cancelled", "reason": null },
+      { "from": "cancelling", "action": "interrupted", "ok": true, "to": "settled", "outcome": "interrupted", "reason": null },
+      { "from": "running", "action": "finish", "ok": true, "to": "settled", "outcome": "completed", "reason": null },
+      { "from": "running", "action": "fail", "ok": true, "to": "settled", "outcome": "failed", "reason": null },
+      { "from": "running", "action": "refuse", "ok": true, "to": "settled", "outcome": "refused", "reason": null },
+      { "from": "running", "action": "reap", "ok": true, "to": "settled", "outcome": "failed", "reason": "stalled" },
+      { "from": "awaiting-human", "action": "reap", "ok": true, "to": "settled", "outcome": "failed", "reason": "stalled" },
+      { "from": "pending", "action": "finish", "ok": false, "to": null, "outcome": null, "reason": null },
+      { "from": "awaiting-human", "action": "finish", "ok": false, "to": null, "outcome": null, "reason": null },
+      { "from": "settled", "action": "start", "ok": false, "to": null, "outcome": null, "reason": null },
+      { "from": "settled", "action": "reap", "ok": false, "to": null, "outcome": null, "reason": null },
+      { "from": "cancelling", "action": "resume", "ok": false, "to": null, "outcome": null, "reason": null },
+      { "from": "running", "action": "explode", "ok": false, "to": null, "outcome": null, "reason": null },
+      { "from": "nowhere", "action": "start", "ok": false, "to": null, "outcome": null, "reason": null }
+    ]
+  },
+  "delivery": {
+    "legs": ["js", "php"],
+    "cases": [
+      { "from": "sending", "action": "ack", "ok": true, "to": "sent" },
+      { "from": "sending", "action": "fail", "ok": true, "to": "failed" },
+      { "from": "sent", "action": "queue", "ok": true, "to": "queued" },
+      { "from": "sent", "action": "deliver", "ok": true, "to": "delivered" },
+      { "from": "sent", "action": "steer", "ok": true, "to": "steered" },
+      { "from": "queued", "action": "steer", "ok": true, "to": "steered" },
+      { "from": "queued", "action": "unsend", "ok": true, "to": "unsent" },
+      { "from": "queued", "action": "drop", "ok": true, "to": "dropped" },
+      { "from": "sent", "action": "unsend", "ok": false, "to": null },
+      { "from": "delivered", "action": "unsend", "ok": false, "to": null },
+      { "from": "unsent", "action": "deliver", "ok": false, "to": null },
+      { "from": "failed", "action": "ack", "ok": false, "to": null }
+    ]
+  },
+  "approval": {
+    "legs": ["js", "php"],
+    "cases": [
+      { "from": "pending", "action": "begin-decision", "ok": true, "to": "deciding" },
+      { "from": "deciding", "action": "decision-failed", "ok": true, "to": "pending" },
+      { "from": "deciding", "action": "approve", "ok": true, "to": "approved" },
+      { "from": "deciding", "action": "reject", "ok": true, "to": "rejected" },
+      { "from": "deciding", "action": "edit", "ok": true, "to": "edited" },
+      { "from": "approved", "action": "apply", "ok": true, "to": "applied" },
+      { "from": "edited", "action": "apply-fail", "ok": true, "to": "apply-failed" },
+      { "from": "pending", "action": "withdraw", "ok": true, "to": "withdrawn" },
+      { "from": "pending", "action": "expire", "ok": true, "to": "expired" },
+      { "from": "pending", "action": "approve", "ok": false, "to": null },
+      { "from": "pending", "action": "apply", "ok": false, "to": null },
+      { "from": "rejected", "action": "apply", "ok": false, "to": null },
+      { "from": "deciding", "action": "withdraw", "ok": false, "to": null },
+      { "from": "applied", "action": "approve", "ok": false, "to": null }
+    ]
+  },
+  "optionTone": {
+    "legs": ["js", "php"],
+    "cases": [
+      { "kind": "allow-once", "label": "Reject", "tone": "positive", "decision": "approve" },
+      { "kind": "allow-always", "label": "Always", "tone": "positive", "decision": "approve" },
+      { "kind": "reject-once", "label": "Allow", "tone": "negative", "decision": "reject" },
+      { "kind": "reject-always", "label": "Never", "tone": "negative", "decision": "reject" },
+      { "kind": "edit", "label": "Approve with changes", "tone": "neutral", "decision": "edit" },
+      { "kind": "approve-everything", "label": "Approve", "tone": null, "decision": null }
+    ]
+  },
+  "decide": {
+    "legs": ["js", "php"],
+    "cases": [
+      { "actor": { "kind": "human", "id": "u_1" }, "allowed": true },
+      { "actor": { "kind": "agent", "id": "compass" }, "allowed": false },
+      { "actor": { "kind": "system", "id": "server" }, "allowed": false },
+      { "actor": { "kind": "human", "id": "" }, "allowed": false },
+      { "actor": { "kind": "Human", "id": "u_1" }, "allowed": false },
+      { "actor": null, "allowed": false }
+    ]
+  },
+  "reservedTools": {
+    "legs": ["js", "php"],
+    "cases": [
+      { "name": "hitl_decide", "reserved": true },
+      { "name": "question_answer", "reserved": true },
+      { "name": "send_as_human", "reserved": true },
+      { "name": "approve_tool_call", "reserved": true },
+      { "name": "Request_Approval", "reserved": true },
+      { "name": "confirm_action", "reserved": true },
+      { "name": "grant_permission", "reserved": true },
+      { "name": "chat_read", "reserved": false },
+      { "name": "hitl_list", "reserved": false },
+      { "name": "chat_draft_set", "reserved": false }
+    ]
+  },
+  "question": {
+    "legs": ["js", "php"],
+    "question": {
+      "questionId": "q_1",
+      "prompt": "How should we ship?",
+      "fields": [
+        { "id": "when", "type": "single", "options": [{ "id": "now", "label": "Now" }, { "id": "later", "label": "Later" }], "required": true },
+        { "id": "who", "type": "multi", "options": [{ "id": "a", "label": "A" }, { "id": "b", "label": "B" }], "required": true },
+        { "id": "why", "type": "text", "required": false }
+      ],
+      "allowNote": true
+    },
+    "cases": [
+      { "name": "every required field answered", "draft": { "values": { "when": "now", "who": ["a"] }, "notes": {} }, "canSubmit": true, "error": null },
+      { "name": "a note stands in for an option", "draft": { "values": { "when": "now" }, "notes": { "who": "neither, ask me" } }, "canSubmit": true, "error": null },
+      { "name": "blank note does not count", "draft": { "values": { "when": "now" }, "notes": { "who": "   " } }, "canSubmit": false, "error": "question.required" },
+      { "name": "required single missing", "draft": { "values": { "who": ["b"] }, "notes": {} }, "canSubmit": false, "error": "question.required" },
+      { "name": "option not offered", "draft": { "values": { "when": "tomorrow", "who": ["a"] }, "notes": {} }, "canSubmit": false, "error": "question.option" },
+      { "name": "multi with an unknown option", "draft": { "values": { "when": "now", "who": ["a", "z"] }, "notes": {} }, "canSubmit": false, "error": "question.option" },
+      { "name": "empty multi is not an answer", "draft": { "values": { "when": "now", "who": [] }, "notes": {} }, "canSubmit": false, "error": "question.required" },
+      { "name": "unknown field", "draft": { "values": { "when": "now", "who": ["a"], "extra": "x" }, "notes": {} }, "canSubmit": false, "error": "question.field" },
+      { "name": "text field must be a string", "draft": { "values": { "when": "now", "who": ["a"], "why": 5 }, "notes": {} }, "canSubmit": false, "error": "question.value" },
+      { "name": "a note does not count when the question allows none", "allowNote": false, "draft": { "values": { "when": "now" }, "notes": { "who": "neither" } }, "canSubmit": false, "error": "question.required" }
+    ]
+  },
+  "actionable": {
+    "legs": ["js", "php"],
+    "cases": [
+      { "name": "oldest pending wins", "items": [{ "id": "ap_2", "kind": "approval", "state": "pending", "seq": 9 }, { "id": "q_1", "kind": "question", "state": "open", "seq": 4 }], "actionable": "q_1" },
+      { "name": "settled items never act", "items": [{ "id": "ap_1", "kind": "approval", "state": "applied", "seq": 1 }, { "id": "ap_2", "kind": "approval", "state": "pending", "seq": 5 }], "actionable": "ap_2" },
+      { "name": "an in-flight decision locks every other item", "items": [{ "id": "ap_1", "kind": "approval", "state": "deciding", "seq": 1 }, { "id": "ap_2", "kind": "approval", "state": "pending", "seq": 5 }], "actionable": null },
+      { "name": "nothing pending", "items": [{ "id": "q_1", "kind": "question", "state": "answered", "seq": 1 }], "actionable": null },
+      { "name": "kinds outside the profile are ignored", "items": [{ "id": "q_1", "kind": "question", "state": "open", "seq": 1 }, { "id": "ap_1", "kind": "approval", "state": "pending", "seq": 2 }], "kinds": ["approval"], "actionable": "ap_1" }
+    ]
+  },
+  "parts": {
+    "legs": ["js", "php"],
+    "cases": [
+      { "name": "markdown text", "part": { "id": "p1", "kind": "text", "format": "markdown", "text": "Hello **there**" }, "context": { "origin": "agent" }, "ok": true, "error": null, "text": "Hello **there**" },
+      { "name": "text format outside the set", "part": { "id": "p1", "kind": "text", "format": "html", "text": "<b>x</b>" }, "context": { "origin": "agent" }, "ok": false, "error": "part.text", "text": null },
+      { "name": "code", "part": { "id": "p2", "kind": "code", "language": "php", "code": "echo 1;" }, "context": { "origin": "agent" }, "ok": true, "error": null, "text": "```php\necho 1;\n```" },
+      { "name": "table copies as TSV", "part": { "id": "p3", "kind": "table", "columns": [{ "key": "name", "label": "Name" }, { "key": "n", "label": "Count", "type": "number" }], "rows": [{ "name": "a", "n": 1 }, { "name": "b", "n": 2 }] }, "context": { "origin": "agent" }, "ok": true, "error": null, "text": "Name\tCount\na\t1\nb\t2" },
+      { "name": "table column needs a key", "part": { "id": "p3", "kind": "table", "columns": [{ "label": "Name" }], "rows": [] }, "context": { "origin": "agent" }, "ok": false, "error": "part.table", "text": null },
+      { "name": "neutral chart spec", "part": { "id": "p4", "kind": "chart", "title": "Revenue", "spec": { "type": "bar", "series": [{ "name": "2026", "data": [1, 2, 3] }], "x": { "categories": ["Jan", "Feb", "Mar"] } } }, "context": { "origin": "agent" }, "ok": true, "error": null, "text": "[chart: Revenue]" },
+      { "name": "chart type outside the set", "part": { "id": "p4", "kind": "chart", "spec": { "type": "sankey3d", "series": [] } }, "context": { "origin": "agent" }, "ok": false, "error": "part.chart", "text": null },
+      { "name": "raw echarts from an agent is refused", "part": { "id": "p4", "kind": "chart", "echarts": { "series": [] } }, "context": { "origin": "agent" }, "ok": false, "error": "part.chart.raw", "text": null },
+      { "name": "raw echarts from trusted server code", "part": { "id": "p4", "kind": "chart", "echarts": { "series": [] } }, "context": { "origin": "server" }, "ok": true, "error": null, "text": "[chart]" },
+      { "name": "file", "part": { "id": "p5", "kind": "file", "name": "report.pdf", "mimeType": "application/pdf", "size": 1024, "ref": "f_1" }, "context": { "origin": "agent" }, "ok": true, "error": null, "text": "[file: report.pdf]" },
+      { "name": "negative file size", "part": { "id": "p5", "kind": "file", "name": "report.pdf", "mimeType": "application/pdf", "size": -1, "ref": "f_1" }, "context": { "origin": "agent" }, "ok": false, "error": "part.file", "text": null },
+      { "name": "image", "part": { "id": "p6", "kind": "image", "ref": "img_1", "alt": "A cat" }, "context": { "origin": "agent" }, "ok": true, "error": null, "text": "[image: A cat]" },
+      { "name": "tool call", "part": { "id": "p7", "kind": "tool-call", "toolCallId": "tc_1", "name": "search", "args": { "q": "x" } }, "context": { "origin": "agent" }, "ok": true, "error": null, "text": "[tool: search]" },
+      { "name": "tool result refusal is not an error", "part": { "id": "p8", "kind": "tool-result", "toolCallId": "tc_1", "outcome": "refusal", "content": "Not allowed here." }, "context": { "origin": "agent" }, "ok": true, "error": null, "text": "Not allowed here." },
+      { "name": "tool result outcome outside the set", "part": { "id": "p8", "kind": "tool-result", "toolCallId": "tc_1", "outcome": "meh", "content": "" }, "context": { "origin": "agent" }, "ok": false, "error": "part.tool-result", "text": null },
+      { "name": "card with nested parts", "part": { "id": "p9", "kind": "card", "cardType": "deal", "title": "Acme", "body": [{ "id": "p9a", "kind": "text", "format": "plain", "text": "Stage: won" }], "actions": [{ "id": "open", "label": "Open", "kind": "link", "href": "https://example.com/deal/1" }, { "id": "nudge", "label": "Nudge", "kind": "post-back" }] }, "context": { "origin": "agent" }, "ok": true, "error": null, "text": "Acme\nStage: won" },
+      { "name": "card link must be http(s)", "part": { "id": "p9", "kind": "card", "cardType": "deal", "body": [], "actions": [{ "id": "open", "label": "Open", "kind": "link", "href": "javascript:alert(1)" }] }, "context": { "origin": "agent" }, "ok": false, "error": "part.card.action", "text": null },
+      { "name": "card nesting is capped", "part": { "id": "c1", "kind": "card", "cardType": "x", "body": [{ "id": "c2", "kind": "card", "cardType": "x", "body": [{ "id": "c3", "kind": "card", "cardType": "x", "body": [{ "id": "c4", "kind": "card", "cardType": "x", "body": [] }] }] }] }, "context": { "origin": "agent" }, "ok": false, "error": "part.depth", "text": null },
+      { "name": "approval parts come only from server records", "part": { "id": "p10", "kind": "approval", "approvalId": "ap_1" }, "context": { "origin": "agent" }, "ok": false, "error": "part.hitl.origin", "text": null },
+      { "name": "approval part placed by the server", "part": { "id": "p10", "kind": "approval", "approvalId": "ap_1" }, "context": { "origin": "server" }, "ok": true, "error": null, "text": "[approval]" },
+      { "name": "question part from an agent", "part": { "id": "p11", "kind": "question", "questionId": "q_1" }, "context": { "origin": "agent" }, "ok": false, "error": "part.hitl.origin", "text": null },
+      { "name": "app extension kind", "part": { "id": "p12", "kind": "x-moic.deal", "dealId": 7 }, "context": { "origin": "agent" }, "ok": true, "error": null, "text": "[x-moic.deal]" },
+      { "name": "unknown core kind", "part": { "id": "p13", "kind": "video" }, "context": { "origin": "agent" }, "ok": false, "error": "part.kind", "text": null },
+      { "name": "part needs an id", "part": { "kind": "text", "format": "plain", "text": "x" }, "context": { "origin": "agent" }, "ok": false, "error": "part.id", "text": null },
+      { "name": "size cap", "part": { "id": "p14", "kind": "text", "format": "plain", "text": "0123456789012345678901234567890123456789" }, "context": { "origin": "agent", "limits": { "maxPartBytes": 32 } }, "ok": false, "error": "part.size", "text": null }
+    ]
+  },
+  "status": {
+    "legs": ["js", "php"],
+    "config": { "coolingMs": 15000, "sleepAfterMs": 600000 },
+    "cases": [
+      { "name": "never started", "snapshot": { "now": 1000000 }, "expect": { "status": "not-started", "detail": null, "since": null, "recovery": [] } },
+      { "name": "broken wins over everything", "snapshot": { "now": 1000000, "broken": "provider unreachable", "turn": { "state": "running", "since": 999000 }, "everStarted": true }, "expect": { "status": "broken", "detail": { "reason": "provider unreachable" }, "since": null, "recovery": ["restart"] } },
+      { "name": "signed out", "snapshot": { "now": 1000000, "signedIn": false, "everStarted": true }, "expect": { "status": "signed-out", "detail": null, "since": null, "recovery": ["sign-in"] } },
+      { "name": "paused on a limit", "snapshot": { "now": 1000000, "limit": { "until": 1060000 }, "everStarted": true }, "expect": { "status": "paused-limit", "detail": { "until": 1060000 }, "since": null, "recovery": ["wait"] } },
+      { "name": "an expired limit no longer pauses", "snapshot": { "now": 1000000, "limit": { "until": 999999 }, "everStarted": true, "lastSettledAt": 900000 }, "expect": { "status": "idle", "detail": null, "since": 915000, "recovery": [] } },
+      { "name": "parked on a human", "snapshot": { "now": 1000000, "turn": { "state": "awaiting-human", "since": 990000 }, "pendingHitl": 1, "everStarted": true }, "expect": { "status": "parked", "detail": { "pending": 1 }, "since": 990000, "recovery": ["open-hitl"] } },
+      { "name": "pending hitl parks even between turns", "snapshot": { "now": 1000000, "pendingHitl": 2, "everStarted": true, "lastSettledAt": 990000 }, "expect": { "status": "parked", "detail": { "pending": 2 }, "since": null, "recovery": ["open-hitl"] } },
+      { "name": "starting", "snapshot": { "now": 1000000, "turn": { "state": "pending", "since": 999500 }, "everStarted": true }, "expect": { "status": "starting", "detail": null, "since": 999500, "recovery": ["stop"] } },
+      { "name": "working with a plan and background work", "snapshot": { "now": 1000000, "turn": { "state": "running", "since": 995000 }, "background": 2, "plan": { "n": 2, "m": 5, "doing": "Drafting" }, "everStarted": true }, "expect": { "status": "working", "detail": { "background": 2, "plan": { "n": 2, "m": 5, "doing": "Drafting" }, "cancelling": false }, "since": 995000, "recovery": ["stop"] } },
+      { "name": "cancelling is still working", "snapshot": { "now": 1000000, "turn": { "state": "cancelling", "since": 999000 }, "everStarted": true }, "expect": { "status": "working", "detail": { "background": 0, "plan": null, "cancelling": true }, "since": 999000, "recovery": [] } },
+      { "name": "background work with no turn", "snapshot": { "now": 1000000, "background": 1, "everStarted": true, "lastSettledAt": 100 }, "expect": { "status": "working", "detail": { "background": 1, "plan": null, "cancelling": false }, "since": null, "recovery": [] } },
+      { "name": "cooling just after a turn", "snapshot": { "now": 1000000, "everStarted": true, "lastSettledAt": 990000 }, "expect": { "status": "cooling", "detail": null, "since": 990000, "recovery": [] } },
+      { "name": "cooling ends exactly at the window", "snapshot": { "now": 1005000, "everStarted": true, "lastSettledAt": 990000 }, "expect": { "status": "idle", "detail": null, "since": 1005000, "recovery": [] } },
+      { "name": "sleeping after a long idle", "snapshot": { "now": 2000000, "everStarted": true, "lastSettledAt": 1000000 }, "expect": { "status": "sleeping", "detail": null, "since": 1600000, "recovery": [] } },
+      { "name": "host recovery overrides", "snapshot": { "now": 1000000, "broken": "x", "everStarted": true }, "config": { "recovery": { "broken": ["restart", "report"] } }, "expect": { "status": "broken", "detail": { "reason": "x" }, "since": null, "recovery": ["restart", "report"] } }
+    ]
+  },
+  "projection": {
+    "legs": ["js", "php"],
+    "defaults": { "v": 1, "threadId": "t_1", "at": "2026-11-15T10:00:00.000Z", "actor": { "kind": "agent", "id": "compass" }, "data": {} },
+    "cases": [
+      {
+        "name": "a streamed answer with thinking and a tool",
+        "events": [
+          { "seq": 1, "type": "message.created", "actor": { "kind": "human", "id": "u_1" }, "data": { "turnId": "u_4", "message": { "id": "m_1", "role": "user", "parts": [{ "id": "p1", "kind": "text", "format": "plain", "text": "Find Acme" }], "delivery": "sent" } } },
+          { "seq": 2, "type": "turn.started", "actor": { "kind": "system", "id": "server" }, "data": { "turnId": "u_4" } },
+          { "seq": 3, "type": "turn.transition", "actor": { "kind": "system", "id": "server" }, "data": { "turnId": "u_4", "action": "start" } },
+          { "seq": 4, "type": "delivery.changed", "actor": { "kind": "system", "id": "server" }, "data": { "messageId": "m_1", "action": "deliver" } },
+          { "seq": 5, "type": "thinking.started", "runId": "r_9" },
+          { "seq": 6, "type": "thinking.delta", "runId": "r_9", "data": { "text": "Look up " } },
+          { "seq": 7, "type": "thinking.delta", "runId": "r_9", "data": { "text": "the deal." } },
+          { "seq": 8, "type": "thinking.completed", "runId": "r_9" },
+          { "seq": 9, "type": "tool.called", "runId": "r_9", "data": { "toolCallId": "tc_1", "name": "search_deals", "args": { "q": "Acme" }, "startedAt": "2026-11-15T10:00:01.000Z" } },
+          { "seq": 10, "type": "tool.progress", "runId": "r_9", "data": { "toolCallId": "tc_1", "fraction": 0.5 } },
+          { "seq": 11, "type": "tool.result", "runId": "r_9", "data": { "toolCallId": "tc_1", "outcome": "ok", "durationMs": 420, "outputRef": "o_1", "truncated": false } },
+          { "seq": 12, "type": "thinking.started", "runId": "r_9" },
+          { "seq": 13, "type": "thinking.delta", "runId": "r_9", "data": { "text": " Found it." } },
+          { "seq": 14, "type": "message.created", "runId": "r_9", "data": { "turnId": "u_4", "message": { "id": "m_2", "role": "assistant", "parts": [] } } },
+          { "seq": 15, "type": "part.started", "runId": "r_9", "data": { "messageId": "m_2", "part": { "id": "p2", "kind": "text", "format": "markdown", "text": "Acme is " } } },
+          { "seq": 16, "type": "part.delta", "runId": "r_9", "data": { "messageId": "m_2", "partId": "p2", "text": "**won**." } },
+          { "seq": 17, "type": "part.completed", "runId": "r_9", "data": { "messageId": "m_2", "partId": "p2" } },
+          { "seq": 18, "type": "turn.settled", "actor": { "kind": "system", "id": "server" }, "data": { "turnId": "u_4", "action": "finish" } }
+        ],
+        "expect": {
+          "lastSeq": 18,
+          "illegal": 0,
+          "turns": [{ "turnId": "u_4", "state": "settled", "outcome": "completed", "reason": null }],
+          "approvals": [],
+          "questions": [],
+          "rows": [
+            { "kind": "message", "id": "m_1", "role": "user", "author": { "kind": "human", "id": "u_1" }, "turnId": "u_4", "parts": [{ "id": "p1", "kind": "text", "format": "plain", "text": "Find Acme" }], "open": [], "delivery": "delivered", "supersedes": null, "retracted": false, "superseded": false },
+            { "kind": "thinking", "id": "r_9", "runId": "r_9", "text": "Look up the deal. Found it.", "live": true },
+            { "kind": "tool", "id": "tc_1", "runId": "r_9", "toolCallId": "tc_1", "name": "search_deals", "args": { "q": "Acme" }, "startedAt": "2026-11-15T10:00:01.000Z", "progress": { "fraction": 0.5, "text": null }, "outcome": "ok", "durationMs": 420, "outputRef": "o_1", "truncated": false },
+            { "kind": "message", "id": "m_2", "role": "assistant", "author": { "kind": "agent", "id": "compass" }, "turnId": "u_4", "parts": [{ "id": "p2", "kind": "text", "format": "markdown", "text": "Acme is **won**." }], "open": [], "delivery": null, "supersedes": null, "retracted": false, "superseded": false }
+          ]
+        }
+      },
+      {
+        "name": "replays and duplicates are idempotent",
+        "events": [
+          { "seq": 1, "type": "turn.started", "data": { "turnId": "u_1" } },
+          { "seq": 2, "type": "turn.transition", "data": { "turnId": "u_1", "action": "start" } },
+          { "seq": 2, "type": "turn.transition", "data": { "turnId": "u_1", "action": "start" } },
+          { "seq": 1, "type": "turn.started", "data": { "turnId": "u_1" } },
+          { "seq": 3, "type": "turn.transition", "data": { "turnId": "u_1", "action": "park" } }
+        ],
+        "expect": { "lastSeq": 3, "illegal": 0, "turns": [{ "turnId": "u_1", "state": "awaiting-human", "outcome": null, "reason": null }], "approvals": [], "questions": [], "rows": [] }
+      },
+      {
+        "name": "illegal transitions are counted and never corrupt state",
+        "events": [
+          { "seq": 1, "type": "turn.started", "data": { "turnId": "u_1" } },
+          { "seq": 2, "type": "turn.transition", "data": { "turnId": "u_1", "action": "finish" } },
+          { "seq": 3, "type": "turn.settled", "data": { "turnId": "u_1", "action": "start" } },
+          { "seq": 4, "type": "turn.transition", "data": { "turnId": "u_1", "action": "start" } },
+          { "seq": 5, "type": "turn.transition", "data": { "turnId": "u_1", "action": "finish" } },
+          { "seq": 6, "type": "turn.transition", "data": { "turnId": "u_1", "action": "park" } },
+          { "seq": 7, "type": "turn.settled", "data": { "turnId": "u_1", "action": "reap" } },
+          { "seq": 8, "type": "turn.settled", "data": { "turnId": "u_1", "action": "finish" } },
+          { "seq": 9, "type": "turn.transition", "data": { "turnId": "u_1", "action": "start" } },
+          { "seq": 10, "type": "turn.transition", "data": { "turnId": "u_404", "action": "start" } },
+          { "seq": 11, "type": "delivery.changed", "data": { "messageId": "m_404", "action": "deliver" } }
+        ],
+        "expect": { "lastSeq": 11, "illegal": 7, "turns": [{ "turnId": "u_1", "state": "settled", "outcome": "failed", "reason": "stalled" }], "approvals": [], "questions": [], "rows": [] }
+      },
+      {
+        "name": "an approval decided by a human and applied",
+        "events": [
+          { "seq": 1, "type": "approval.requested", "actor": { "kind": "system", "id": "server" }, "data": { "approval": { "approvalId": "ap_1", "runId": "r_1", "toolCallId": "tc_1", "title": "Send the email?", "summary": "To 3 recipients", "preview": [], "options": [{ "id": "o1", "kind": "allow-once", "label": "Send" }, { "id": "o2", "kind": "reject-once", "label": "Don't send" }], "state": "pending" } } },
+          { "seq": 2, "type": "approval.decided", "actor": { "kind": "agent", "id": "compass" }, "data": { "approvalId": "ap_1", "decision": "approve", "decidedBy": { "kind": "agent", "id": "compass" } } },
+          { "seq": 3, "type": "approval.decided", "actor": { "kind": "human", "id": "u_1" }, "data": { "approvalId": "ap_1", "decision": "approve", "decidedBy": { "kind": "human", "id": "u_1" }, "optionId": "o1" } },
+          { "seq": 4, "type": "approval.applied", "actor": { "kind": "system", "id": "server" }, "data": { "approvalId": "ap_1", "ok": true } },
+          { "seq": 5, "type": "approval.requested", "actor": { "kind": "system", "id": "server" }, "data": { "approval": { "approvalId": "ap_3", "title": "Pay?", "summary": "", "preview": [], "options": [{ "id": "o1", "kind": "allow-once", "label": "Pay" }], "state": "pending" } } },
+          { "seq": 6, "type": "approval.decided", "actor": { "kind": "agent", "id": "compass" }, "data": { "approvalId": "ap_3", "decision": "approve", "decidedBy": { "kind": "agent", "id": "compass" } } },
+          { "seq": 7, "type": "approval.decided", "actor": { "kind": "agent", "id": "compass" }, "data": { "approvalId": "ap_3", "decision": "approve", "decidedBy": { "kind": "human", "id": "u_1" } } },
+          { "seq": 8, "type": "approval.decided", "actor": { "kind": "human", "id": "u_2" }, "data": { "approvalId": "ap_3", "decision": "approve", "decidedBy": { "kind": "human", "id": "u_1" } } }
+        ],
+        "expect": { "lastSeq": 8, "illegal": 4, "turns": [], "approvals": [{ "approvalId": "ap_1", "state": "applied" }, { "approvalId": "ap_3", "state": "pending" }], "questions": [], "rows": [{ "kind": "approval", "id": "ap_1", "approvalId": "ap_1", "state": "applied" }, { "kind": "approval", "id": "ap_3", "approvalId": "ap_3", "state": "pending" }] }
+      },
+      {
+        "name": "a question answered only by a human, and a withdrawn approval",
+        "events": [
+          { "seq": 1, "type": "question.asked", "actor": { "kind": "system", "id": "server" }, "data": { "question": { "questionId": "q_1", "prompt": "Which?", "fields": [{ "id": "f", "type": "text", "required": true }], "allowNote": false } } },
+          { "seq": 2, "type": "question.answered", "actor": { "kind": "agent", "id": "compass" }, "data": { "questionId": "q_1", "answeredBy": { "kind": "agent", "id": "compass" }, "values": { "f": "me" } } },
+          { "seq": 3, "type": "approval.requested", "actor": { "kind": "system", "id": "server" }, "data": { "approval": { "approvalId": "ap_2", "title": "Delete?", "summary": "", "preview": [], "options": [{ "id": "o1", "kind": "allow-once", "label": "Delete" }], "state": "pending" } } },
+          { "seq": 4, "type": "approval.withdrawn", "actor": { "kind": "system", "id": "server" }, "data": { "approvalId": "ap_2" } },
+          { "seq": 5, "type": "question.answered", "actor": { "kind": "human", "id": "u_1" }, "data": { "questionId": "q_1", "answeredBy": { "kind": "human", "id": "u_1" }, "values": { "f": "them" } } },
+          { "seq": 6, "type": "question.asked", "actor": { "kind": "system", "id": "server" }, "data": { "question": { "questionId": "q_2", "prompt": "Who?", "fields": [{ "id": "f", "type": "text", "required": true }], "allowNote": false } } },
+          { "seq": 7, "type": "question.answered", "actor": { "kind": "agent", "id": "compass" }, "data": { "questionId": "q_2", "answeredBy": { "kind": "agent", "id": "compass" }, "values": { "f": "me" } } },
+          { "seq": 8, "type": "question.answered", "actor": { "kind": "agent", "id": "compass" }, "data": { "questionId": "q_2", "answeredBy": { "kind": "human", "id": "u_1" }, "values": { "f": "me" } } }
+        ],
+        "expect": { "lastSeq": 8, "illegal": 3, "turns": [], "approvals": [{ "approvalId": "ap_2", "state": "withdrawn" }], "questions": [{ "questionId": "q_1", "state": "answered" }, { "questionId": "q_2", "state": "open" }], "rows": [{ "kind": "question", "id": "q_1", "questionId": "q_1", "state": "answered" }, { "kind": "approval", "id": "ap_2", "approvalId": "ap_2", "state": "withdrawn" }, { "kind": "question", "id": "q_2", "questionId": "q_2", "state": "open" }] }
+      },
+      {
+        "name": "edit and resend supersedes, retract hides, queue then unsend",
+        "events": [
+          { "seq": 1, "type": "message.created", "actor": { "kind": "human", "id": "u_1" }, "data": { "message": { "id": "m_1", "role": "user", "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "draft one" }], "delivery": "sent" } } },
+          { "seq": 2, "type": "message.created", "actor": { "kind": "human", "id": "u_1" }, "data": { "message": { "id": "m_2", "role": "user", "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "draft two" }], "delivery": "sent", "supersedes": "m_1" } } },
+          { "seq": 3, "type": "delivery.changed", "data": { "messageId": "m_2", "action": "queue" } },
+          { "seq": 4, "type": "delivery.changed", "data": { "messageId": "m_2", "action": "unsend" } },
+          { "seq": 5, "type": "message.created", "data": { "message": { "id": "m_3", "role": "assistant", "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "oops" }] } } },
+          { "seq": 6, "type": "message.retracted", "data": { "messageId": "m_3" } },
+          { "seq": 7, "type": "message.updated", "data": { "messageId": "m_1", "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "edited" }] } }
+        ],
+        "expect": {
+          "lastSeq": 7, "illegal": 0, "turns": [], "approvals": [], "questions": [],
+          "rows": [
+            { "kind": "message", "id": "m_1", "role": "user", "author": { "kind": "human", "id": "u_1" }, "turnId": null, "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "edited" }], "open": [], "delivery": "sent", "supersedes": null, "retracted": false, "superseded": true },
+            { "kind": "message", "id": "m_2", "role": "user", "author": { "kind": "human", "id": "u_1" }, "turnId": null, "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "draft two" }], "open": [], "delivery": "unsent", "supersedes": "m_1", "retracted": false, "superseded": false },
+            { "kind": "message", "id": "m_3", "role": "assistant", "author": { "kind": "agent", "id": "compass" }, "turnId": null, "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "oops" }], "open": [], "delivery": null, "supersedes": null, "retracted": true, "superseded": false }
+          ]
+        }
+      },
+      {
+        "name": "a reset replaces state from its snapshot",
+        "events": [
+          { "seq": 1, "type": "turn.started", "data": { "turnId": "u_1" } },
+          { "seq": 40, "type": "thread.reset", "actor": { "kind": "system", "id": "server" }, "data": { "snapshot": { "lastSeq": 39, "illegal": 0, "order": [{ "kind": "message", "id": "m_9" }], "messages": [{ "id": "m_9", "role": "assistant", "author": { "kind": "agent", "id": "compass" }, "turnId": null, "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "kept" }], "open": [], "delivery": null, "supersedes": null, "retracted": false, "superseded": false }], "turns": [], "thinking": [], "tools": [], "plans": [], "approvals": [], "questions": [] } } },
+          { "seq": 41, "type": "part.started", "data": { "messageId": "m_9", "part": { "id": "p2", "kind": "text", "format": "plain", "text": "more" } } }
+        ],
+        "expect": {
+          "lastSeq": 41, "illegal": 0, "turns": [], "approvals": [], "questions": [],
+          "rows": [
+            { "kind": "message", "id": "m_9", "role": "assistant", "author": { "kind": "agent", "id": "compass" }, "turnId": null, "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "kept" }, { "id": "p2", "kind": "text", "format": "plain", "text": "more" }], "open": ["p2"], "delivery": null, "supersedes": null, "retracted": false, "superseded": false }
+          ]
+        }
+      },
+      {
+        "name": "plan updates replace the run's plan, non-text deltas replace the part",
+        "events": [
+          { "seq": 1, "type": "plan.updated", "runId": "r_1", "data": { "steps": [{ "id": "s1", "title": "Read", "status": "running", "owner": "agent" }] } },
+          { "seq": 2, "type": "message.created", "runId": "r_1", "data": { "message": { "id": "m_1", "role": "assistant", "parts": [] } } },
+          { "seq": 3, "type": "part.started", "runId": "r_1", "data": { "messageId": "m_1", "part": { "id": "t", "kind": "table", "columns": [{ "key": "a", "label": "A" }], "rows": [] } } },
+          { "seq": 4, "type": "part.delta", "runId": "r_1", "data": { "messageId": "m_1", "partId": "t", "part": { "id": "t", "kind": "table", "columns": [{ "key": "a", "label": "A" }], "rows": [{ "a": 1 }] } } },
+          { "seq": 5, "type": "plan.updated", "runId": "r_1", "data": { "steps": [{ "id": "s1", "title": "Read", "status": "done", "owner": "agent" }, { "id": "s2", "title": "Ask", "status": "held", "owner": "human", "approvalId": "ap_1" }] } }
+        ],
+        "expect": {
+          "lastSeq": 5, "illegal": 0, "turns": [], "approvals": [], "questions": [],
+          "rows": [
+            { "kind": "plan", "id": "r_1", "runId": "r_1", "steps": [{ "id": "s1", "title": "Read", "status": "done", "owner": "agent" }, { "id": "s2", "title": "Ask", "status": "held", "owner": "human", "approvalId": "ap_1" }] },
+            { "kind": "message", "id": "m_1", "role": "assistant", "author": { "kind": "agent", "id": "compass" }, "turnId": null, "parts": [{ "id": "t", "kind": "table", "columns": [{ "key": "a", "label": "A" }], "rows": [{ "a": 1 }] }], "open": ["t"], "delivery": null, "supersedes": null, "retracted": false, "superseded": false }
+          ]
+        }
+      }
+    ]
+  },
+  "sequence": {
+    "legs": ["js"],
+    "cases": [
+      { "name": "in order", "batches": [[1, 2, 3]], "expect": { "lastSeq": 3, "applied": [1, 2, 3], "missing": null } },
+      { "name": "duplicates dropped", "batches": [[1, 2], [2, 2, 3, 1]], "expect": { "lastSeq": 3, "applied": [1, 2, 3], "missing": null } },
+      { "name": "a gap is held and reported", "batches": [[1, 2, 5, 6]], "expect": { "lastSeq": 2, "applied": [1, 2], "missing": { "after": 2, "before": 5 } } },
+      { "name": "the gap fills and the held events release in order", "batches": [[1, 2, 5, 6], [4, 3]], "expect": { "lastSeq": 6, "applied": [1, 2, 3, 4, 5, 6], "missing": null } },
+      { "name": "resume from a cursor", "start": 10, "batches": [[9, 10, 11, 12]], "expect": { "lastSeq": 12, "applied": [11, 12], "missing": null } },
+      { "name": "a reset jumps the cursor and discards held events at or below it", "batches": [[1, 4], [{ "seq": 7, "type": "thread.reset" }, 8]], "expect": { "lastSeq": 8, "applied": [1, 7, 8], "missing": null } }
+    ]
+  }
+}
