@@ -229,6 +229,8 @@ final class Projection
                     'durationMs' => null,
                     'outputRef' => null,
                     'truncated' => false,
+                    'output' => null,
+                    'outputLanguage' => null,
                 ];
                 $state['order'][] = ['kind' => 'tool', 'id' => $data['toolCallId']];
                 break;
@@ -256,6 +258,9 @@ final class Projection
                 $state['tools'][$i]['durationMs'] = Json::isNumber($data['durationMs'] ?? null) ? $data['durationMs'] : null;
                 $state['tools'][$i]['outputRef'] = is_string($data['outputRef'] ?? null) ? $data['outputRef'] : null;
                 $state['tools'][$i]['truncated'] = ($data['truncated'] ?? null) === true;
+                // Plain text only: render as text or code, never HTML (fancy-chat-js ToolEntry).
+                $state['tools'][$i]['output'] = is_string($data['output'] ?? null) ? $data['output'] : null;
+                $state['tools'][$i]['outputLanguage'] = is_string($data['outputLanguage'] ?? null) ? $data['outputLanguage'] : null;
                 break;
 
             case 'plan.updated':

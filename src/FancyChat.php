@@ -887,6 +887,21 @@ final class FancyChat
                 $check = Plan::check($previous, $data['steps'], $state['approvals']);
                 $error = $check['ok'] ? null : $check['error'];
                 break;
+            case 'tool.result':
+                // A tool's output is bounded HERE, by characters, so a tool that
+                // returns megabytes cannot flood every client. A cut output is
+                // marked truncated; the host's outputRef points at the rest.
+                if (array_key_exists('output', $data) && ! is_string($data['output'])) {
+                    unset($data['output']);
+                }
+                if (is_string($data['output'] ?? null)) {
+                    $max = max(0, (int) $this->cfg('limits.tool_output_chars', 16384));
+                    if (mb_strlen($data['output']) > $max) {
+                        $data['output'] = mb_substr($data['output'], 0, $max);
+                        $data['truncated'] = true;
+                    }
+                }
+                break;
             case 'approval.requested':
                 [$record, $error] = $this->approvalRecord($data['approval'] ?? null, $turnId, $raw['runId'] ?? null);
                 $data['approval'] = $record;

@@ -227,7 +227,7 @@
           { "seq": 8, "type": "thinking.completed", "runId": "r_9" },
           { "seq": 9, "type": "tool.called", "runId": "r_9", "data": { "toolCallId": "tc_1", "name": "search_deals", "args": { "q": "Acme" }, "startedAt": "2026-11-15T10:00:01.000Z" } },
           { "seq": 10, "type": "tool.progress", "runId": "r_9", "data": { "toolCallId": "tc_1", "fraction": 0.5 } },
-          { "seq": 11, "type": "tool.result", "runId": "r_9", "data": { "toolCallId": "tc_1", "outcome": "ok", "durationMs": 420, "outputRef": "o_1", "truncated": false } },
+          { "seq": 11, "type": "tool.result", "runId": "r_9", "data": { "toolCallId": "tc_1", "outcome": "ok", "durationMs": 420, "outputRef": "o_1", "truncated": false, "output": null, "outputLanguage": null } },
           { "seq": 12, "type": "thinking.started", "runId": "r_9" },
           { "seq": 13, "type": "thinking.delta", "runId": "r_9", "data": { "text": " Found it." } },
           { "seq": 14, "type": "message.created", "runId": "r_9", "data": { "turnId": "u_4", "message": { "id": "m_2", "role": "assistant", "parts": [] } } },
@@ -245,7 +245,7 @@
           "rows": [
             { "kind": "message", "id": "m_1", "role": "user", "author": { "kind": "human", "id": "u_1" }, "turnId": "u_4", "parts": [{ "id": "p1", "kind": "text", "format": "plain", "text": "Find Acme" }], "open": [], "delivery": "delivered", "supersedes": null, "retracted": false, "superseded": false },
             { "kind": "thinking", "id": "r_9", "runId": "r_9", "text": "Look up the deal. Found it.", "live": true },
-            { "kind": "tool", "id": "tc_1", "runId": "r_9", "toolCallId": "tc_1", "name": "search_deals", "args": { "q": "Acme" }, "startedAt": "2026-11-15T10:00:01.000Z", "progress": { "fraction": 0.5, "text": null }, "outcome": "ok", "durationMs": 420, "outputRef": "o_1", "truncated": false },
+            { "kind": "tool", "id": "tc_1", "runId": "r_9", "toolCallId": "tc_1", "name": "search_deals", "args": { "q": "Acme" }, "startedAt": "2026-11-15T10:00:01.000Z", "progress": { "fraction": 0.5, "text": null }, "outcome": "ok", "durationMs": 420, "outputRef": "o_1", "truncated": false, "output": null, "outputLanguage": null },
             { "kind": "message", "id": "m_2", "role": "assistant", "author": { "kind": "agent", "id": "compass" }, "turnId": "u_4", "parts": [{ "id": "p2", "kind": "text", "format": "markdown", "text": "Acme is **won**." }], "open": [], "delivery": null, "supersedes": null, "retracted": false, "superseded": false }
           ]
         }
@@ -393,9 +393,28 @@
           "rows": [
             { "kind": "message", "id": "m_1", "role": "user", "author": { "kind": "human", "id": "u_1" }, "turnId": null, "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "one" }], "open": [], "delivery": "sent", "supersedes": null, "retracted": false, "superseded": true },
             { "kind": "message", "id": "m_2", "role": "assistant", "author": { "kind": "agent", "id": "compass" }, "turnId": null, "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "reply" }], "open": [], "delivery": null, "supersedes": null, "retracted": false, "superseded": false },
-            { "kind": "tool", "id": "tc_1", "runId": "r_1", "toolCallId": "tc_1", "name": "search", "args": {}, "startedAt": null, "progress": null, "outcome": null, "durationMs": null, "outputRef": null, "truncated": false },
+            { "kind": "tool", "id": "tc_1", "runId": "r_1", "toolCallId": "tc_1", "name": "search", "args": {}, "startedAt": null, "progress": null, "outcome": null, "durationMs": null, "outputRef": null, "truncated": false, "output": null, "outputLanguage": null },
             { "kind": "message", "id": "m_3", "role": "user", "author": { "kind": "human", "id": "u_1" }, "turnId": null, "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "one, edited" }], "open": [], "delivery": "sent", "supersedes": "m_1", "retracted": false, "superseded": false },
             { "kind": "message", "id": "m_4", "role": "user", "author": { "kind": "human", "id": "u_1" }, "turnId": null, "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "ghost" }], "open": [], "delivery": "sent", "supersedes": "m_404", "retracted": false, "superseded": false }
+          ]
+        }
+      },
+      {
+        "name": "a tool result carries its output inline: text, code, and a failure's own words",
+        "events": [
+          { "seq": 1, "type": "tool.called", "runId": "r_1", "data": { "toolCallId": "tc_1", "name": "search_deals", "args": { "q": "Acme" } } },
+          { "seq": 2, "type": "tool.result", "runId": "r_1", "data": { "toolCallId": "tc_1", "outcome": "ok", "durationMs": 12, "output": "{\"deals\":[7]}", "outputLanguage": "json", "truncated": true, "outputRef": "o_9" } },
+          { "seq": 3, "type": "tool.called", "runId": "r_1", "data": { "toolCallId": "tc_2", "name": "send_email", "args": {} } },
+          { "seq": 4, "type": "tool.result", "runId": "r_1", "data": { "toolCallId": "tc_2", "outcome": "failure", "output": "SMTP 550: mailbox unavailable" } },
+          { "seq": 5, "type": "tool.called", "runId": "r_1", "data": { "toolCallId": "tc_3", "name": "x", "args": {} } },
+          { "seq": 6, "type": "tool.result", "runId": "r_1", "data": { "toolCallId": "tc_3", "outcome": "ok", "output": 42, "outputLanguage": 7 } }
+        ],
+        "expect": {
+          "lastSeq": 6, "illegal": 0, "turns": [], "approvals": [], "questions": [],
+          "rows": [
+            { "kind": "tool", "id": "tc_1", "runId": "r_1", "toolCallId": "tc_1", "name": "search_deals", "args": { "q": "Acme" }, "startedAt": null, "progress": null, "outcome": "ok", "durationMs": 12, "outputRef": "o_9", "truncated": true, "output": "{\"deals\":[7]}", "outputLanguage": "json" },
+            { "kind": "tool", "id": "tc_2", "runId": "r_1", "toolCallId": "tc_2", "name": "send_email", "args": {}, "startedAt": null, "progress": null, "outcome": "failure", "durationMs": null, "outputRef": null, "truncated": false, "output": "SMTP 550: mailbox unavailable", "outputLanguage": null },
+            { "kind": "tool", "id": "tc_3", "runId": "r_1", "toolCallId": "tc_3", "name": "x", "args": {}, "startedAt": null, "progress": null, "outcome": "ok", "durationMs": null, "outputRef": null, "truncated": false, "output": null, "outputLanguage": null }
           ]
         }
       },

@@ -44,6 +44,8 @@ return [
         'part_depth' => 3,
         'parts_per_message' => 64,
         'queue_length' => 20,
+        /* A tool result's inline output, in characters; longer is cut and marked truncated. */
+        'tool_output_chars' => 16384,
     ],
 
     'reaper' => [

@@ -12,7 +12,7 @@ namespace FancyChat\Tests\Support;
  */
 final class Fixtures
 {
-    public const string SHA256 = '5ce5595a67eb63ea1cf07ce9a6b93aa990c833081b63bf794457dafd05506603';
+    public const string SHA256 = '6cde3f5c90f2210e56e0709779b7ae59586df4c013965bf552f1161c5631836a';
 
     public const string MACHINES_SHA256 = '78959500f6db660cc3b13c808033468edd2dfa5d9d89e30e9d60f0696764c142';
 

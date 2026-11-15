@@ -8,6 +8,16 @@ version number is not a stability promise until 1.0; read the entry.
 
 ## [Unreleased]
 
+### Added
+
+- **A tool result carries its output inline.** `tool.result` may carry `output`
+  (the result text, or a failure's own words) and `outputLanguage`; the
+  projection keeps both on the tool row. The server bounds `output` by
+  characters at `limits.tool_output_chars` (default 16384) and marks a cut
+  output `truncated`, so a tool that returns megabytes cannot flood every
+  client. A non-text `output` is dropped. Plain text end to end, never HTML.
+  Contract re-vendored: fixture `6cde3f5c...`.
+
 ### Fixed (since the phase 2 entries below, all unreleased)
 
 - **Truncate cancels the turn a removed branch left parked.** Before, the new
