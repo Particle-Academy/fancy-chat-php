@@ -244,9 +244,43 @@
           "questions": [],
           "rows": [
             { "kind": "message", "id": "m_1", "role": "user", "author": { "kind": "human", "id": "u_1" }, "turnId": "u_4", "parts": [{ "id": "p1", "kind": "text", "format": "plain", "text": "Find Acme" }], "open": [], "delivery": "delivered", "supersedes": null, "retracted": false, "superseded": false },
-            { "kind": "thinking", "id": "r_9", "runId": "r_9", "text": "Look up the deal. Found it.", "live": true },
-            { "kind": "tool", "id": "tc_1", "runId": "r_9", "toolCallId": "tc_1", "name": "search_deals", "args": { "q": "Acme" }, "startedAt": "2026-11-15T10:00:01.000Z", "progress": { "fraction": 0.5, "text": null }, "outcome": "ok", "durationMs": 420, "outputRef": "o_1", "truncated": false, "output": null, "outputLanguage": null },
+            { "kind": "thinking", "id": "r_9", "thinkingId": "r_9", "runId": "r_9", "text": "Look up the deal.", "live": false },
+            { "kind": "tool", "id": "tc_1", "runId": "r_9", "toolCallId": "tc_1", "name": "search_deals", "args": { "q": "Acme" }, "startedAt": "2026-11-15T10:00:01.000Z", "progress": { "fraction": 0.5, "text": null }, "outcome": "ok", "durationMs": 420, "durationExact": true, "outputRef": "o_1", "truncated": false, "output": null, "outputLanguage": null },
+            { "kind": "thinking", "id": "r_9#2", "thinkingId": "r_9#2", "runId": "r_9", "text": " Found it.", "live": true },
             { "kind": "message", "id": "m_2", "role": "assistant", "author": { "kind": "agent", "id": "compass" }, "turnId": "u_4", "parts": [{ "id": "p2", "kind": "text", "format": "markdown", "text": "Acme is **won**." }], "open": [], "delivery": null, "supersedes": null, "retracted": false, "superseded": false }
+          ]
+        }
+      },
+      {
+        "name": "thinking interleaves within one run: several blocks, in order; an inexact tool duration",
+        "events": [
+          { "seq": 1, "type": "thinking.started", "runId": "r_1" },
+          { "seq": 2, "type": "thinking.delta", "runId": "r_1", "data": { "text": "A" } },
+          { "seq": 3, "type": "thinking.completed", "runId": "r_1" },
+          { "seq": 4, "type": "tool.called", "runId": "r_1", "data": { "toolCallId": "tc_1", "name": "search", "args": {} } },
+          { "seq": 5, "type": "tool.result", "runId": "r_1", "data": { "toolCallId": "tc_1", "outcome": "ok", "durationMs": 1200, "durationExact": false } },
+          { "seq": 6, "type": "thinking.delta", "runId": "r_1", "data": { "text": "B" } },
+          { "seq": 7, "type": "thinking.completed", "runId": "r_1" },
+          { "seq": 8, "type": "thinking.started", "runId": "r_1", "data": { "thinkingId": "th_x" } },
+          { "seq": 9, "type": "thinking.delta", "runId": "r_1", "data": { "thinkingId": "th_x", "text": "C" } },
+          { "seq": 10, "type": "thinking.delta", "runId": "r_1", "data": { "text": "D" } },
+          { "seq": 11, "type": "thinking.completed", "runId": "r_2" },
+          { "seq": 12, "type": "thinking.delta", "runId": "r_1", "data": { "thinkingId": 7, "text": "E" } },
+          { "seq": 13, "type": "tool.called", "runId": "r_1", "data": { "toolCallId": "tc_2", "name": "x", "args": {} } },
+          { "seq": 14, "type": "tool.result", "runId": "r_1", "data": { "toolCallId": "tc_2", "outcome": "ok", "durationMs": 5, "durationExact": "no" } }
+        ],
+        "expect": {
+          "lastSeq": 14,
+          "illegal": 2,
+          "turns": [],
+          "approvals": [],
+          "questions": [],
+          "rows": [
+            { "kind": "thinking", "id": "r_1", "thinkingId": "r_1", "runId": "r_1", "text": "A", "live": false },
+            { "kind": "tool", "id": "tc_1", "runId": "r_1", "toolCallId": "tc_1", "name": "search", "args": {}, "startedAt": null, "progress": null, "outcome": "ok", "durationMs": 1200, "durationExact": false, "outputRef": null, "truncated": false, "output": null, "outputLanguage": null },
+            { "kind": "thinking", "id": "r_1#2", "thinkingId": "r_1#2", "runId": "r_1", "text": "B", "live": false },
+            { "kind": "thinking", "id": "th_x", "thinkingId": "th_x", "runId": "r_1", "text": "CD", "live": true },
+            { "kind": "tool", "id": "tc_2", "runId": "r_1", "toolCallId": "tc_2", "name": "x", "args": {}, "startedAt": null, "progress": null, "outcome": "ok", "durationMs": 5, "durationExact": true, "outputRef": null, "truncated": false, "output": null, "outputLanguage": null }
           ]
         }
       },
@@ -393,7 +427,7 @@
           "rows": [
             { "kind": "message", "id": "m_1", "role": "user", "author": { "kind": "human", "id": "u_1" }, "turnId": null, "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "one" }], "open": [], "delivery": "sent", "supersedes": null, "retracted": false, "superseded": true },
             { "kind": "message", "id": "m_2", "role": "assistant", "author": { "kind": "agent", "id": "compass" }, "turnId": null, "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "reply" }], "open": [], "delivery": null, "supersedes": null, "retracted": false, "superseded": false },
-            { "kind": "tool", "id": "tc_1", "runId": "r_1", "toolCallId": "tc_1", "name": "search", "args": {}, "startedAt": null, "progress": null, "outcome": null, "durationMs": null, "outputRef": null, "truncated": false, "output": null, "outputLanguage": null },
+            { "kind": "tool", "id": "tc_1", "runId": "r_1", "toolCallId": "tc_1", "name": "search", "args": {}, "startedAt": null, "progress": null, "outcome": null, "durationMs": null, "durationExact": true, "outputRef": null, "truncated": false, "output": null, "outputLanguage": null },
             { "kind": "message", "id": "m_3", "role": "user", "author": { "kind": "human", "id": "u_1" }, "turnId": null, "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "one, edited" }], "open": [], "delivery": "sent", "supersedes": "m_1", "retracted": false, "superseded": false },
             { "kind": "message", "id": "m_4", "role": "user", "author": { "kind": "human", "id": "u_1" }, "turnId": null, "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "ghost" }], "open": [], "delivery": "sent", "supersedes": "m_404", "retracted": false, "superseded": false }
           ]
@@ -412,9 +446,9 @@
         "expect": {
           "lastSeq": 6, "illegal": 0, "turns": [], "approvals": [], "questions": [],
           "rows": [
-            { "kind": "tool", "id": "tc_1", "runId": "r_1", "toolCallId": "tc_1", "name": "search_deals", "args": { "q": "Acme" }, "startedAt": null, "progress": null, "outcome": "ok", "durationMs": 12, "outputRef": "o_9", "truncated": true, "output": "{\"deals\":[7]}", "outputLanguage": "json" },
-            { "kind": "tool", "id": "tc_2", "runId": "r_1", "toolCallId": "tc_2", "name": "send_email", "args": {}, "startedAt": null, "progress": null, "outcome": "failure", "durationMs": null, "outputRef": null, "truncated": false, "output": "SMTP 550: mailbox unavailable", "outputLanguage": null },
-            { "kind": "tool", "id": "tc_3", "runId": "r_1", "toolCallId": "tc_3", "name": "x", "args": {}, "startedAt": null, "progress": null, "outcome": "ok", "durationMs": null, "outputRef": null, "truncated": false, "output": null, "outputLanguage": null }
+            { "kind": "tool", "id": "tc_1", "runId": "r_1", "toolCallId": "tc_1", "name": "search_deals", "args": { "q": "Acme" }, "startedAt": null, "progress": null, "outcome": "ok", "durationMs": 12, "durationExact": true, "outputRef": "o_9", "truncated": true, "output": "{\"deals\":[7]}", "outputLanguage": "json" },
+            { "kind": "tool", "id": "tc_2", "runId": "r_1", "toolCallId": "tc_2", "name": "send_email", "args": {}, "startedAt": null, "progress": null, "outcome": "failure", "durationMs": null, "durationExact": true, "outputRef": null, "truncated": false, "output": "SMTP 550: mailbox unavailable", "outputLanguage": null },
+            { "kind": "tool", "id": "tc_3", "runId": "r_1", "toolCallId": "tc_3", "name": "x", "args": {}, "startedAt": null, "progress": null, "outcome": "ok", "durationMs": null, "durationExact": true, "outputRef": null, "truncated": false, "output": null, "outputLanguage": null }
           ]
         }
       },

@@ -194,14 +194,32 @@ final class Projection
             case 'thinking.delta':
             case 'thinking.completed':
                 $runId = $event['runId'] ?? self::NO_RUN;
-                $i = self::indexOf($state['thinking'], 'runId', $runId);
+                if (array_key_exists('thinkingId', $data) && ! is_string($data['thinkingId'])) {
+                    $illegal();
+                    break;
+                }
+                $explicit = is_string($data['thinkingId'] ?? null) ? $data['thinkingId'] : null;
+                // Without an explicit id: the run's newest block, unless it has completed and
+                // this event opens new thinking (fancy-chat-js projection, ThinkingEntry).
+                $ofRun = array_keys(array_filter($state['thinking'], fn (array $t): bool => $t['runId'] === $runId));
+                $latest = $ofRun === [] ? null : $ofRun[count($ofRun) - 1];
+                if ($explicit !== null) {
+                    $i = self::indexOf($state['thinking'], 'thinkingId', $explicit);
+                } else {
+                    $i = $latest !== null && ($state['thinking'][$latest]['live'] || $type === 'thinking.completed') ? $latest : null;
+                }
                 if ($i === null) {
                     if ($type === 'thinking.completed') {
                         $illegal();
                         break;
                     }
-                    $state['thinking'][] = ['runId' => $runId, 'text' => '', 'live' => true];
-                    $state['order'][] = ['kind' => 'thinking', 'id' => $runId];
+                    $thinkingId = $explicit ?? ($ofRun === [] ? $runId : $runId.'#'.(count($ofRun) + 1));
+                    if (self::indexOf($state['thinking'], 'thinkingId', $thinkingId) !== null) {
+                        $illegal();
+                        break;
+                    }
+                    $state['thinking'][] = ['thinkingId' => $thinkingId, 'runId' => $runId, 'text' => '', 'live' => true];
+                    $state['order'][] = ['kind' => 'thinking', 'id' => $thinkingId];
                     $i = count($state['thinking']) - 1;
                 }
                 if ($type === 'thinking.started') {
@@ -227,6 +245,7 @@ final class Projection
                     'progress' => null,
                     'outcome' => null,
                     'durationMs' => null,
+                    'durationExact' => true,
                     'outputRef' => null,
                     'truncated' => false,
                     'output' => null,
@@ -256,6 +275,7 @@ final class Projection
                 }
                 $state['tools'][$i]['outcome'] = $outcome;
                 $state['tools'][$i]['durationMs'] = Json::isNumber($data['durationMs'] ?? null) ? $data['durationMs'] : null;
+                $state['tools'][$i]['durationExact'] = ($data['durationExact'] ?? null) !== false;
                 $state['tools'][$i]['outputRef'] = is_string($data['outputRef'] ?? null) ? $data['outputRef'] : null;
                 $state['tools'][$i]['truncated'] = ($data['truncated'] ?? null) === true;
                 // Plain text only: render as text or code, never HTML (fancy-chat-js ToolEntry).
@@ -479,7 +499,7 @@ final class Projection
                     }
                     break;
                 case 'thinking':
-                    $i = self::indexOf($state['thinking'], 'runId', $id);
+                    $i = self::indexOf($state['thinking'], 'thinkingId', $id);
                     if ($i !== null) {
                         $rows[] = ['kind' => 'thinking', 'id' => $id] + $state['thinking'][$i];
                     }

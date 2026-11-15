@@ -10,6 +10,12 @@ version number is not a stability promise until 1.0; read the entry.
 
 ### Added
 
+- **Several thinking blocks per run, in order** (fancy-chat-js 6fbfe4c). A run that
+  thinks, calls a tool and thinks again projects two thinking rows, each with a
+  `thinkingId` (the event's `data.thinkingId`, else the run id, then `<runId>#2`...).
+  A non-string `thinkingId` is illegal. Rows key thinking by `thinkingId`.
+- **`durationExact` on a tool row**: `false` only when `tool.result` says so.
+- Contract re-vendored: fixture `7d382bf7...`.
 - **A tool result carries its output inline.** `tool.result` may carry `output`
   (the result text, or a failure's own words) and `outputLanguage`; the
   projection keeps both on the tool row. The server bounds `output` by
