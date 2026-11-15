@@ -99,7 +99,7 @@ jobs:
         with:
           php-version: ${{ matrix.php }}
           coverage: none
-          extensions: mbstring, dom, zip, pdo_sqlite
+          extensions: mbstring, dom, zip, pdo_sqlite, intl
         env:
           update: true # latest patch, not the runner's preinstalled one
       - name: Floor PHP at the PHP2Shell-patched release (CVE-2026-109618/109619)
