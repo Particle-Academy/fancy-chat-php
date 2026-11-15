@@ -215,7 +215,10 @@ it('two committers running at once commit a window once', function (string $stor
     $id = chat()->openUndo('t_1', 'send-email', 'Email', 1000);
     tick(1000);
     $nested = null;
-    $undo->duringCommit = function () use (&$nested): void {
+    // The second committer runs ONCE, so a missing lock shows up as a second
+    // commit rather than as unbounded recursion that hangs the sabotage sweep.
+    $undo->duringCommit = function () use (&$nested, $undo): void {
+        $undo->duringCommit = null;
         $nested = chat()->commitExpiredUndos();
     };
     expect(chat()->commitExpiredUndos())->toBe(1);
