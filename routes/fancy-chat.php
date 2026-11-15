@@ -13,3 +13,4 @@ Route::post('threads/{thread}/cancel', [ChatController::class, 'cancel'])->name(
 Route::delete('threads/{thread}/queue/{message}', [ChatController::class, 'unsend'])->name('fancy-chat.unsend');
 Route::post('approvals/{approval}/decision', [ChatController::class, 'decide'])->name('fancy-chat.decide');
 Route::post('questions/{question}/answer', [ChatController::class, 'answer'])->name('fancy-chat.answer');
+Route::post('undo/{action}/revert', [ChatController::class, 'revertUndo'])->name('fancy-chat.undo.revert');

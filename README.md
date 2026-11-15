@@ -49,7 +49,7 @@ Mounted under `fancy-chat` (configurable, or off with `fancy-chat.routes`):
 
 | Route | Purpose |
 |---|---|
-| `POST threads/{id}/messages` | A human sends `{parts, supersedes?}`. Returns `{messageId, seq, delivery}`. Mid-turn it queues. |
+| `POST threads/{id}/messages` | A human sends `{parts, supersedes?}`. Returns `{messageId, seq, delivery}`. Mid-turn it queues. With typed approval on and a match, it returns `typedDecision` too (see below). |
 | `GET threads/{id}/events` | SSE. Resumes from `Last-Event-ID` or `?after`, replays, then streams live with heartbeat comments until `sse.max_duration_ms`. |
 | `GET threads/{id}/events/poll?after=&wait=` | Long-poll: `{events, next}`. |
 | `GET threads/{id}/snapshot?at=` | The projected thread at a seq. |
@@ -57,6 +57,7 @@ Mounted under `fancy-chat` (configurable, or off with `fancy-chat.routes`):
 | `DELETE threads/{id}/queue/{messageId}` | The author unsends a queued message. |
 | `POST approvals/{id}/decision` | `{optionId, note?, edited?}`. Human actors only. |
 | `POST questions/{id}/answer` | `{values, notes?}`. Human actors only. |
+| `POST undo/{actionId}/revert` | Human actors only, before the deadline. Returns `{undo, seq}`. |
 
 A cursor older than the retention window gets a `thread.reset` event carrying
 the snapshot, then the retained events, so a client always converges on the
@@ -76,6 +77,50 @@ same projection.
   decisions, answers, deliveries or resets, nor use a non-agent actor. A refused
   event is recorded as `x-fancy-chat.refused` with its error code.
 - **One actionable at a time.** An in-flight lock holds while a decision posts.
+- **A held plan step releases only through its approval.** A backend's
+  `plan.updated` that releases one early is refused before it is appended.
+
+## Typed approval (opt-in per app)
+
+Off by default, with no phrases until you set them:
+
+```php
+'typed_approval' => ['enabled' => true, 'locale' => 'en', 'phrases' => ['en' => \FancyChat\Contract\TypedApproval::ENGLISH]],
+```
+
+When the thread's one actionable HITL item is a pending approval and a human
+sends exactly one text part matching a phrase (after NFKC, case, spacing and
+trailing-punctuation folding; never a model), the message IS the decision. It
+takes the same decide path as `POST approvals/{id}/decision` (the same human
+actor, access check, in-flight lock and staged write), is recorded as the
+human's message with delivery `sent`, and is never delivered to the agent. The
+response adds `typedDecision: {approvalId, optionId, decision, state}`, and the
+log gets `x-fancy-chat.typed-decision {messageId, approvalId, optionId,
+decision}`. A typed phrase picks a one-time option only. If the decision is
+refused (another decision in flight, access), the message is dropped and the
+error stands. Requires ext-intl.
+
+## Undo windows
+
+Register a `FancyChat\Undoable` (`commit`, `revert`) per action kind with
+`FancyChat::undoable($kind, $undoable)`, then, right after the action:
+
+```php
+$actionId = $chat->openUndo($threadId, 'send-email', 'Email to 3 people', 30_000);
+```
+
+The window is your choice per action (default `undo.default_ms`, capped at
+`undo.max_ms`). A human reverts with `POST undo/{actionId}/revert` before the
+deadline; `fancy-chat:commit-undo` (and `fancy-chat:reap`) commits the rest.
+A revert and the commit each claim the window atomically, so exactly one of
+them runs, once, even when they race. A throw leaves the window open.
+
+## Edit and resend
+
+`POST messages` with `supersedes` replaces the author's own earlier user
+message. The projection records the superseded branch in `branches`.
+`edit_resend.policy` decides its fate: `branch` (the default) keeps it;
+`truncate` retracts its messages and withdraws its pending approvals.
 
 ## Backends
 
@@ -100,7 +145,8 @@ Every limit lives in `config/fancy-chat.php`: `retention.events`,
 `sse.{heartbeat_ms,max_duration_ms,interval_ms,retry_ms}`,
 `limits.{event_bytes,part_bytes,part_depth,parts_per_message,queue_length}`,
 `reaper.{timeout_ms,include_parked}`, `cancel.confirm_wait_ms`, `hitl.scope`,
-`nudge.*` and `queue.*`.
+`typed_approval.{enabled,locale,phrases}`, `undo.{default_ms,max_ms,batch}`,
+`edit_resend.policy`, `nudge.*` and `queue.*`.
 
 ## Develop
 
@@ -110,5 +156,28 @@ vendor/bin/pest          # forced in-memory SQLite; provider keys blanked
 php tests/sabotage.php   # breaks one clause at a time; the suite must notice each
 php tests/lint.php
 ```
+
+### The end-to-end server
+
+`tests/e2e/serve.php` boots the package against a SQLite FILE for driving a
+real client (fancy-chat-ui's transport) over HTTP. Not for production.
+
+```bash
+FANCY_CHAT_E2E_DB=/tmp/fancy-chat-e2e.sqlite php -S 127.0.0.1:8765 tests/e2e/serve.php
+```
+
+| Env | Meaning |
+|---|---|
+| `FANCY_CHAT_E2E_DB` | Required. The SQLite file; created and migrated on first use. |
+| `FANCY_CHAT_E2E_SSE_MS` | SSE max duration per connection, default 1500 (`php -S` serves one request at a time). |
+| `FANCY_CHAT_E2E_POLL_MS` | Long-poll max wait, default 1500. |
+| `FANCY_CHAT_E2E_TYPED` | `1` turns typed approval on with the English phrases. |
+| `FANCY_CHAT_E2E_UNDO_MS` | The undo window opened when the approval's write applies, default 30000. |
+
+Header `X-E2E-User: <id>` is the human actor (none: 401). Every thread is
+allowed. A message starts a sync turn that streams thinking, one tool call and
+result, an assistant text part in three deltas, then approval `ap_<turnId>`
+(options `yes` allow-once, `no` reject-once) and parks. Approving applies a
+staged write that opens an undo window, then the turn resumes with "Sent.".
 
 MIT licence.

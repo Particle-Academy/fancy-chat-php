@@ -6,8 +6,11 @@ use FancyChat\Contract\Envelope;
 use FancyChat\Contract\Hitl;
 use FancyChat\Contract\Machines;
 use FancyChat\Contract\Parts;
+use FancyChat\Contract\Plan;
 use FancyChat\Contract\Projection;
 use FancyChat\Contract\Status;
+use FancyChat\Contract\TypedApproval;
+use FancyChat\Contract\Undo;
 use FancyChat\Tests\Support\Fixtures;
 
 /*
@@ -34,7 +37,7 @@ it('runs every section that names the php leg', function (): void {
         }
     }
     sort($php);
-    expect($php)->toBe(['actionable', 'approval', 'decide', 'delivery', 'envelope', 'optionTone', 'parts', 'projection', 'question', 'reservedTools', 'status', 'turn']);
+    expect($php)->toBe(['actionable', 'approval', 'decide', 'delivery', 'envelope', 'optionTone', 'parts', 'planStep', 'projection', 'question', 'reservedTools', 'status', 'turn', 'typedApproval', 'undo']);
 });
 
 it('validates the envelope', function (array $c): void {
@@ -101,12 +104,55 @@ it('projects the thread', function (array $c): void {
     $defaults = Fixtures::section('projection')['defaults'];
     $events = array_map(fn (array $e): array => array_merge($defaults, $e), $c['events']);
     $p = Projection::project($events);
-    expect(canon([
+    $got = [
         'lastSeq' => $p['lastSeq'],
         'illegal' => $p['illegal'],
         'turns' => $p['turns'],
         'approvals' => array_map(fn (array $a): array => ['approvalId' => $a['approvalId'], 'state' => $a['state']], $p['approvals']),
         'questions' => array_map(fn (array $q): array => ['questionId' => $q['questionId'], 'state' => $q['state']], $p['questions']),
         'rows' => $p['rows'],
-    ]))->toBe(canon($c['expect']));
+    ];
+    if (array_key_exists('branches', $c['expect'])) {
+        $got['branches'] = $p['state']['branches'];
+    }
+    expect(canon($got))->toBe(canon($c['expect']));
 })->with(Fixtures::cases('projection', fn (array $c): string => $c['name']));
+
+it('matches typed approval', function (array $c): void {
+    $section = Fixtures::section('typedApproval');
+    $config = array_merge($section['config'], $c['config'] ?? []);
+    $approval = $section['approval'];
+    if (isset($c['approvalState'])) {
+        $approval['state'] = $c['approvalState'];
+    }
+    if (isset($c['options'])) {
+        $approval['options'] = $c['options'];
+    }
+    expect(TypedApproval::match($c['text'], $approval, $config))->toBe($c['expect']);
+})->with(Fixtures::cases('typedApproval', fn (array $c): string => $c['name']));
+
+it('reads the undo window', function (array $c): void {
+    expect(Undo::window($c['entry'], Undo::toMs($c['now'])))->toBe($c['expect']);
+})->with(Fixtures::cases('undo', fn (array $c): string => $c['name']));
+
+it('releases a held plan step only through its approval', function (array $c): void {
+    $r = Plan::check($c['prev'], $c['next'], Fixtures::section('planStep')['approvals']);
+    expect(['ok' => $r['ok'], 'error' => $r['ok'] ? null : $r['error']])->toBe(['ok' => $c['ok'], 'error' => $c['error']]);
+})->with(Fixtures::cases('planStep', fn (array $c): string => $c['name']));
+
+it('keeps typed approval off, with no phrases, until the host turns it on', function (): void {
+    $approval = ['state' => 'pending', 'options' => [['id' => 'o', 'kind' => 'allow-once', 'label' => 'Go']]];
+    expect(TypedApproval::DEFAULT)->toBe(['enabled' => false, 'locale' => 'en', 'phrases' => []])
+        ->and(TypedApproval::match('approve', $approval, ['phrases' => ['en' => ['approve' => ['approve']]]]))->toBeNull()
+        ->and(TypedApproval::match('approve', $approval, ['enabled' => true]))->toBeNull()
+        ->and(TypedApproval::match('approve', $approval, ['enabled' => true, 'phrases' => ['en' => ['approve' => ['approve']]]]))->toBe(['optionId' => 'o', 'decision' => 'approve'])
+        ->and(TypedApproval::ENGLISH)->toBe(['approve' => ['approve', 'yes, approve'], 'reject' => ['reject', 'no, reject']]);
+});
+
+it('defaults undos and branches when a snapshot omits them', function (): void {
+    $state = Projection::emptyState();
+    unset($state['undos'], $state['branches']);
+    $event = ['v' => 1, 'seq' => 5, 'threadId' => 't', 'at' => '2026-11-15T10:00:00.000Z', 'type' => 'thread.reset', 'actor' => ['kind' => 'system', 'id' => 's'], 'data' => ['snapshot' => $state]];
+    $p = Projection::project([$event]);
+    expect($p['state']['undos'])->toBe([])->and($p['state']['branches'])->toBe([]);
+});

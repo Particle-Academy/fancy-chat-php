@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FancyChat;
 
+use FancyChat\Console\CommitUndoCommand;
 use FancyChat\Console\ReapCommand;
 use FancyChat\Store\DatabaseThreadEventStore;
 use FancyChat\Store\MemoryThreadEventStore;
@@ -39,7 +40,7 @@ final class FancyChatServiceProvider extends ServiceProvider
                 ->group(__DIR__.'/../routes/fancy-chat.php');
         }
 
-        $this->commands([ReapCommand::class]);
+        $this->commands([ReapCommand::class, CommitUndoCommand::class]);
         if ($this->app->runningInConsole()) {
             $this->publishes([__DIR__.'/../config/fancy-chat.php' => $this->app->configPath('fancy-chat.php')], 'fancy-chat-config');
             $this->publishes([__DIR__.'/../database/migrations' => $this->app->databasePath('migrations')], 'fancy-chat-migrations');

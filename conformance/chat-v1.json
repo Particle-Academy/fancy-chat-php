@@ -350,7 +350,119 @@
             { "kind": "message", "id": "m_1", "role": "assistant", "author": { "kind": "agent", "id": "compass" }, "turnId": null, "parts": [{ "id": "t", "kind": "table", "columns": [{ "key": "a", "label": "A" }], "rows": [{ "a": 1 }] }], "open": ["t"], "delivery": null, "supersedes": null, "retracted": false, "superseded": false }
           ]
         }
+      },
+      {
+        "name": "an undo window is reverted only by a human, and closes once",
+        "events": [
+          { "seq": 1, "type": "undo.opened", "actor": { "kind": "system", "id": "server" }, "data": { "actionId": "a1", "label": "Email to 3 people", "deadline": "2026-11-15T10:00:30.000Z" } },
+          { "seq": 2, "type": "undo.reverted", "actor": { "kind": "agent", "id": "compass" }, "data": { "actionId": "a1", "revertedBy": { "kind": "agent", "id": "compass" } } },
+          { "seq": 3, "type": "undo.reverted", "actor": { "kind": "human", "id": "u_1" }, "data": { "actionId": "a1", "revertedBy": { "kind": "human", "id": "u_1" } } },
+          { "seq": 4, "type": "undo.committed", "actor": { "kind": "system", "id": "server" }, "data": { "actionId": "a1" } },
+          { "seq": 5, "type": "undo.opened", "actor": { "kind": "system", "id": "server" }, "data": { "actionId": "a2", "label": "Post", "deadline": "2026-11-15T10:01:00.000Z" } },
+          { "seq": 6, "type": "undo.reverted", "actor": { "kind": "agent", "id": "compass" }, "data": { "actionId": "a2", "revertedBy": { "kind": "agent", "id": "compass" } } },
+          { "seq": 7, "type": "undo.committed", "actor": { "kind": "system", "id": "server" }, "data": { "actionId": "a2" } },
+          { "seq": 8, "type": "undo.opened", "actor": { "kind": "system", "id": "server" }, "data": { "actionId": "a2", "label": "Again", "deadline": "2026-11-15T10:02:00.000Z" } },
+          { "seq": 9, "type": "undo.opened", "actor": { "kind": "system", "id": "server" }, "data": { "actionId": "a3", "label": "No zone", "deadline": "2026-11-15 10:02:00" } }
+        ],
+        "expect": {
+          "lastSeq": 9, "illegal": 5, "turns": [], "approvals": [], "questions": [],
+          "rows": [
+            { "kind": "undo", "id": "a1", "actionId": "a1", "label": "Email to 3 people", "deadline": "2026-11-15T10:00:30.000Z", "state": "reverted" },
+            { "kind": "undo", "id": "a2", "actionId": "a2", "label": "Post", "deadline": "2026-11-15T10:01:00.000Z", "state": "committed" }
+          ]
+        }
+      },
+      {
+        "name": "edit and resend records the superseded branch for the host's policy",
+        "events": [
+          { "seq": 1, "type": "message.created", "actor": { "kind": "human", "id": "u_1" }, "data": { "message": { "id": "m_1", "role": "user", "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "one" }], "delivery": "sent" } } },
+          { "seq": 2, "type": "message.created", "data": { "message": { "id": "m_2", "role": "assistant", "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "reply" }] } } },
+          { "seq": 3, "type": "tool.called", "runId": "r_1", "data": { "toolCallId": "tc_1", "name": "search", "args": {} } },
+          { "seq": 4, "type": "message.created", "actor": { "kind": "human", "id": "u_1" }, "data": { "message": { "id": "m_3", "role": "user", "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "one, edited" }], "delivery": "sent", "supersedes": "m_1" } } },
+          { "seq": 5, "type": "message.created", "actor": { "kind": "human", "id": "u_1" }, "data": { "message": { "id": "m_4", "role": "user", "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "ghost" }], "delivery": "sent", "supersedes": "m_404" } } }
+        ],
+        "expect": {
+          "lastSeq": 5, "illegal": 0, "turns": [], "approvals": [], "questions": [],
+          "branches": [{ "supersededId": "m_1", "byId": "m_3", "rowIds": ["m_2", "tc_1"] }],
+          "rows": [
+            { "kind": "message", "id": "m_1", "role": "user", "author": { "kind": "human", "id": "u_1" }, "turnId": null, "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "one" }], "open": [], "delivery": "sent", "supersedes": null, "retracted": false, "superseded": true },
+            { "kind": "message", "id": "m_2", "role": "assistant", "author": { "kind": "agent", "id": "compass" }, "turnId": null, "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "reply" }], "open": [], "delivery": null, "supersedes": null, "retracted": false, "superseded": false },
+            { "kind": "tool", "id": "tc_1", "runId": "r_1", "toolCallId": "tc_1", "name": "search", "args": {}, "startedAt": null, "progress": null, "outcome": null, "durationMs": null, "outputRef": null, "truncated": false },
+            { "kind": "message", "id": "m_3", "role": "user", "author": { "kind": "human", "id": "u_1" }, "turnId": null, "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "one, edited" }], "open": [], "delivery": "sent", "supersedes": "m_1", "retracted": false, "superseded": false },
+            { "kind": "message", "id": "m_4", "role": "user", "author": { "kind": "human", "id": "u_1" }, "turnId": null, "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "ghost" }], "open": [], "delivery": "sent", "supersedes": "m_404", "retracted": false, "superseded": false }
+          ]
+        }
+      },
+      {
+        "name": "a held plan step releases only through its approval",
+        "events": [
+          { "seq": 1, "type": "plan.updated", "runId": "r_1", "data": { "steps": [{ "id": "s1", "title": "Pay", "status": "held", "owner": "human", "approvalId": "ap_1" }] } },
+          { "seq": 2, "type": "approval.requested", "actor": { "kind": "system", "id": "server" }, "data": { "approval": { "approvalId": "ap_1", "title": "Pay?", "summary": "", "preview": [], "options": [{ "id": "o1", "kind": "allow-once", "label": "Pay" }], "state": "pending" } } },
+          { "seq": 3, "type": "plan.updated", "runId": "r_1", "data": { "steps": [{ "id": "s1", "title": "Pay", "status": "running", "owner": "human", "approvalId": "ap_1" }] } },
+          { "seq": 4, "type": "approval.decided", "actor": { "kind": "human", "id": "u_1" }, "data": { "approvalId": "ap_1", "decision": "approve", "decidedBy": { "kind": "human", "id": "u_1" }, "optionId": "o1" } },
+          { "seq": 5, "type": "plan.updated", "runId": "r_1", "data": { "steps": [{ "id": "s1", "title": "Pay", "status": "done", "owner": "human", "approvalId": "ap_1" }] } }
+        ],
+        "expect": {
+          "lastSeq": 5, "illegal": 1, "turns": [], "approvals": [{ "approvalId": "ap_1", "state": "approved" }], "questions": [],
+          "rows": [
+            { "kind": "plan", "id": "r_1", "runId": "r_1", "steps": [{ "id": "s1", "title": "Pay", "status": "done", "owner": "human", "approvalId": "ap_1" }] },
+            { "kind": "approval", "id": "ap_1", "approvalId": "ap_1", "state": "approved" }
+          ]
+        }
       }
+    ]
+  },
+  "typedApproval": {
+    "legs": ["js", "php"],
+    "config": { "enabled": true, "locale": "en", "phrases": { "en": { "approve": ["approve", "Yes, approve"], "reject": ["reject", "no, reject"] }, "es": { "approve": ["aprobar"], "reject": ["rechazar"] } } },
+    "approval": { "approvalId": "ap_1", "title": "Send?", "summary": "", "preview": [], "state": "pending", "options": [{ "id": "o_always", "kind": "allow-always", "label": "Always" }, { "id": "o_once", "kind": "allow-once", "label": "Send" }, { "id": "o_no", "kind": "reject-once", "label": "Don't" }, { "id": "o_edit", "kind": "edit", "label": "Edit" }] },
+    "cases": [
+      { "name": "an exact phrase approves with the once option, never always", "text": "approve", "expect": { "optionId": "o_once", "decision": "approve" } },
+      { "name": "case, width, spacing and trailing punctuation are normalised", "text": "  YES,   Approve!!  ", "expect": { "optionId": "o_once", "decision": "approve" } },
+      { "name": "fullwidth letters fold under NFKC", "text": "ａｐｐｒｏｖｅ", "expect": { "optionId": "o_once", "decision": "approve" } },
+      { "name": "reject", "text": "No, reject.", "expect": { "optionId": "o_no", "decision": "reject" } },
+      { "name": "a phrase inside a sentence is not a decision", "text": "please approve it", "expect": null },
+      { "name": "a near miss is not a decision", "text": "approved", "expect": null },
+      { "name": "another locale's phrase does not match", "text": "aprobar", "expect": null },
+      { "name": "the host's locale is used", "text": "aprobar", "config": { "locale": "es" }, "expect": { "optionId": "o_once", "decision": "approve" } },
+      { "name": "off unless the app enables it", "text": "approve", "config": { "enabled": false }, "expect": null },
+      { "name": "no phrases until the host sets them", "text": "approve", "config": { "phrases": {} }, "expect": null },
+      { "name": "only a pending approval can be typed at", "text": "approve", "approvalState": "deciding", "expect": null },
+      { "name": "no once option of that decision means no match", "text": "reject", "options": [{ "id": "o_always", "kind": "allow-always", "label": "Always" }, { "id": "o_never", "kind": "reject-always", "label": "Never" }], "expect": null },
+      { "name": "edit is never typed", "text": "edit", "config": { "phrases": { "en": { "approve": ["approve"], "reject": ["reject"], "edit": ["edit"] } } }, "expect": null }
+    ]
+  },
+  "undo": {
+    "legs": ["js", "php"],
+    "cases": [
+      { "name": "time left in an open window", "entry": { "actionId": "a1", "label": "Email", "deadline": "2026-11-15T10:00:30.000Z", "state": "open" }, "now": "2026-11-15T10:00:10.000Z", "expect": { "remainingMs": 20000, "canRevert": true } },
+      { "name": "at the deadline the window is shut", "entry": { "actionId": "a1", "label": "Email", "deadline": "2026-11-15T10:00:30.000Z", "state": "open" }, "now": "2026-11-15T10:00:30.000Z", "expect": { "remainingMs": 0, "canRevert": false } },
+      { "name": "a committed action cannot be reverted", "entry": { "actionId": "a1", "label": "Email", "deadline": "2026-11-15T10:00:30.000Z", "state": "committed" }, "now": "2026-11-15T10:00:10.000Z", "expect": { "remainingMs": 0, "canRevert": false } },
+      { "name": "a deadline with no zone is shut, never read as local time", "entry": { "actionId": "a1", "label": "Email", "deadline": "2026-11-15 10:00:30", "state": "open" }, "now": "2026-11-15T10:00:10.000Z", "expect": { "remainingMs": 0, "canRevert": false } },
+      { "name": "an unreadable deadline is shut, never open", "entry": { "actionId": "a1", "label": "Email", "deadline": "soon", "state": "open" }, "now": "2026-11-15T10:00:10.000Z", "expect": { "remainingMs": 0, "canRevert": false } }
+    ]
+  },
+  "planStep": {
+    "legs": ["js", "php"],
+    "approvals": [
+      { "approvalId": "ap_ok", "state": "approved" },
+      { "approvalId": "ap_wait", "state": "pending" },
+      { "approvalId": "ap_busy", "state": "deciding" },
+      { "approvalId": "ap_no", "state": "rejected" },
+      { "approvalId": "ap_gone", "state": "withdrawn" }
+    ],
+    "cases": [
+      { "name": "a held step released after its approval", "prev": [{ "id": "s", "title": "Pay", "status": "held", "owner": "human", "approvalId": "ap_ok" }], "next": [{ "id": "s", "title": "Pay", "status": "running", "owner": "human", "approvalId": "ap_ok" }], "ok": true, "error": null },
+      { "name": "a held step cannot run while its approval is pending", "prev": [{ "id": "s", "title": "Pay", "status": "held", "owner": "human", "approvalId": "ap_wait" }], "next": [{ "id": "s", "title": "Pay", "status": "done", "owner": "human", "approvalId": "ap_wait" }], "ok": false, "error": "plan.held" },
+      { "name": "nor while it is being decided", "prev": [{ "id": "s", "title": "Pay", "status": "held", "owner": "human", "approvalId": "ap_busy" }], "next": [{ "id": "s", "title": "Pay", "status": "running", "owner": "human", "approvalId": "ap_busy" }], "ok": false, "error": "plan.held" },
+      { "name": "a held step with no approval cannot be released", "prev": [{ "id": "s", "title": "Pay", "status": "held", "owner": "human" }], "next": [{ "id": "s", "title": "Pay", "status": "running", "owner": "human" }], "ok": false, "error": "plan.held" },
+      { "name": "a rejected step may only be skipped or failed", "prev": [{ "id": "s", "title": "Pay", "status": "held", "owner": "human", "approvalId": "ap_no" }], "next": [{ "id": "s", "title": "Pay", "status": "skipped", "owner": "human", "approvalId": "ap_no" }], "ok": true, "error": null },
+      { "name": "a rejected step cannot run", "prev": [{ "id": "s", "title": "Pay", "status": "held", "owner": "human", "approvalId": "ap_no" }], "next": [{ "id": "s", "title": "Pay", "status": "running", "owner": "human", "approvalId": "ap_no" }], "ok": false, "error": "plan.held" },
+      { "name": "a withdrawn step cannot be done", "prev": [{ "id": "s", "title": "Pay", "status": "held", "owner": "human", "approvalId": "ap_gone" }], "next": [{ "id": "s", "title": "Pay", "status": "done", "owner": "human", "approvalId": "ap_gone" }], "ok": false, "error": "plan.held" },
+      { "name": "swapping the approval id does not release it", "prev": [{ "id": "s", "title": "Pay", "status": "held", "owner": "human", "approvalId": "ap_wait" }], "next": [{ "id": "s", "title": "Pay", "status": "running", "owner": "human", "approvalId": "ap_ok" }], "ok": false, "error": "plan.held" },
+      { "name": "dropping a held step releases nothing", "prev": [{ "id": "s", "title": "Pay", "status": "held", "owner": "human", "approvalId": "ap_wait" }], "next": [], "ok": false, "error": "plan.held" },
+      { "name": "a step may become held, and staying held is fine", "prev": [{ "id": "s", "title": "Pay", "status": "pending", "owner": "agent" }], "next": [{ "id": "s", "title": "Pay", "status": "held", "owner": "human", "approvalId": "ap_wait" }], "ok": true, "error": null },
+      { "name": "an unknown status is refused", "prev": [], "next": [{ "id": "s", "title": "Pay", "status": "paused", "owner": "agent" }], "ok": false, "error": "plan.step" }
     ]
   },
   "sequence": {

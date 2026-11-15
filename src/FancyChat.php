@@ -13,7 +13,10 @@ use FancyChat\Contract\Hitl;
 use FancyChat\Contract\Json;
 use FancyChat\Contract\Machines;
 use FancyChat\Contract\Parts;
+use FancyChat\Contract\Plan;
 use FancyChat\Contract\Projection;
+use FancyChat\Contract\TypedApproval;
+use FancyChat\Contract\Undo;
 use FancyChat\Jobs\RunTurn;
 use FancyChat\Store\ThreadEventStore;
 use Illuminate\Contracts\Bus\Dispatcher;
@@ -54,6 +57,9 @@ final class FancyChat
     /** @var array<string, StagedWrite> */
     private array $stagedWrites = [];
 
+    /** @var array<string, Undoable> */
+    private array $undoables = [];
+
     public function __construct(private Container $app, private ThreadEventStore $store, private Repository $config) {}
 
     // ---------------------------------------------------------------- binding
@@ -84,6 +90,14 @@ final class FancyChat
     public function stagedWrite(string $name, StagedWrite $write): self
     {
         $this->stagedWrites[$name] = $write;
+
+        return $this;
+    }
+
+    /** Registers the host's commit/revert for one undoable action kind. */
+    public function undoable(string $kind, Undoable $undoable): self
+    {
+        $this->undoables[$kind] = $undoable;
 
         return $this;
     }
@@ -427,8 +441,21 @@ final class FancyChat
         }
         $state = $this->snapshot($threadId);
         $supersedes = $body['supersedes'] ?? null;
-        if ($supersedes !== null && (! is_string($supersedes) || ! in_array($supersedes, array_column($state['messages'], 'id'), true))) {
-            throw new ChatException('message.supersedes', 422);
+        if ($supersedes !== null) {
+            $policy = $this->editResendPolicy();
+            // Edit and resend: only the author's own human message can be superseded.
+            $target = is_string($supersedes) ? $this->findRecord($state, 'messages', 'id', $supersedes) : null;
+            if ($target === null || ($target['role'] ?? null) !== 'user'
+                || ($target['author']['kind'] ?? null) !== $actor['kind'] || ($target['author']['id'] ?? null) !== $actor['id']) {
+                throw new ChatException('message.supersedes', 422);
+            }
+        }
+
+        if ($supersedes === null) {
+            $typed = $this->typedDecision($request, $threadId, $state, $actor, $parts);
+            if ($typed !== null) {
+                return $typed;
+            }
         }
 
         $messageId = 'm_'.bin2hex(random_bytes(8));
@@ -443,15 +470,214 @@ final class FancyChat
                 throw new ChatException('queue.full', 429);
             }
             $created = $this->append($threadId, ['type' => 'message.created', 'actor' => $actor, 'data' => ['message' => $message]]);
+            if ($supersedes !== null && $policy === 'truncate') {
+                $this->truncateBranch($threadId, $messageId);
+            }
             $this->append($threadId, ['type' => 'delivery.changed', 'data' => ['messageId' => $messageId, 'action' => 'queue']]);
 
             return ['messageId' => $messageId, 'seq' => $created['seq'], 'delivery' => 'queued'];
         }
 
         $created = $this->append($threadId, ['type' => 'message.created', 'actor' => $actor, 'data' => ['message' => $message]]);
+        if ($supersedes !== null && $policy === 'truncate') {
+            $this->truncateBranch($threadId, $messageId);
+        }
         $this->startTurn($threadId, $messageId, $parts);
 
         return ['messageId' => $messageId, 'seq' => $created['seq'], 'delivery' => 'sent'];
+    }
+
+    /** The host's edit-and-resend policy: `branch` (the default) or `truncate`. */
+    private function editResendPolicy(): string
+    {
+        $policy = $this->cfg('edit_resend.policy', 'branch');
+        if (! in_array($policy, ['branch', 'truncate'], true)) {
+            throw new ChatException('config.edit_resend.policy', 500);
+        }
+
+        return $policy;
+    }
+
+    /**
+     * Truncate policy: retracts every message in the branch `$byId` superseded
+     * and withdraws its pending approvals. The branch is the projection's own
+     * record, so it is the same rows the client shows.
+     */
+    private function truncateBranch(string $threadId, string $byId): void
+    {
+        $state = $this->snapshot($threadId);
+        $rowIds = [];
+        foreach ($state['branches'] as $branch) {
+            if ($branch['byId'] === $byId) {
+                $rowIds = $branch['rowIds'];
+            }
+        }
+        foreach ($state['messages'] as $m) {
+            if (in_array($m['id'], $rowIds, true) && $m['retracted'] === false) {
+                $this->append($threadId, ['type' => 'message.retracted', 'data' => ['messageId' => $m['id']]]);
+            }
+        }
+        foreach ($state['approvals'] as $a) {
+            if (in_array($a['approvalId'], $rowIds, true) && $a['state'] === 'pending' && $this->store->claim($a['approvalId'], 'pending', 'withdrawn')) {
+                $this->append($threadId, ['type' => 'approval.withdrawn', 'turnId' => $a['turnId'] ?? null, 'data' => ['approvalId' => $a['approvalId']]]);
+            }
+        }
+    }
+
+    /**
+     * Typed approval (opt-in per app). When the thread's one actionable HITL
+     * item is a pending approval and the message is exactly one text part
+     * matching the host's phrases, the message is the decision: it takes the
+     * SAME decide path as the decision endpoint, is recorded as the human's
+     * message, and is never delivered to the agent.
+     *
+     * @param  array<string, mixed>  $state
+     * @param  array{kind: string, id: string}  $actor
+     * @param  list<array<string, mixed>>  $parts
+     * @return array<string, mixed>|null
+     */
+    private function typedDecision(Request $request, string $threadId, array $state, array $actor, array $parts): ?array
+    {
+        $config = (array) $this->cfg('typed_approval', []);
+        if (($config['enabled'] ?? false) !== true || count($parts) !== 1 || ($parts[0]['kind'] ?? null) !== 'text' || ! is_string($parts[0]['text'] ?? null)) {
+            return null;
+        }
+        $actionable = Hitl::pickActionable($this->hitlItems($state), null);
+        $approval = $actionable === null ? null : $this->findRecord($state, 'approvals', 'approvalId', $actionable);
+        $match = TypedApproval::match($parts[0]['text'], $approval, $config);
+        if ($match === null || $approval === null) {
+            return null;
+        }
+
+        $messageId = 'm_'.bin2hex(random_bytes(8));
+        $created = $this->append($threadId, ['type' => 'message.created', 'actor' => $actor, 'data' => ['message' => [
+            'id' => $messageId, 'role' => 'user', 'parts' => $parts, 'delivery' => 'sent',
+        ]]]);
+        try {
+            $decided = $this->decide($request, $approval['approvalId'], ['optionId' => $match['optionId']]);
+        } catch (Throwable $e) {
+            // Not a decision after all: the message is dropped, the error stands, and nothing reached the agent.
+            $this->append($threadId, ['type' => 'delivery.changed', 'data' => ['messageId' => $messageId, 'action' => 'drop']]);
+
+            throw $e;
+        }
+        $this->append($threadId, ['type' => 'x-fancy-chat.typed-decision', 'actor' => $actor, 'data' => [
+            'messageId' => $messageId, 'approvalId' => $approval['approvalId'], 'optionId' => $match['optionId'], 'decision' => $match['decision'],
+        ]]);
+
+        return [
+            'messageId' => $messageId,
+            'seq' => $created['seq'],
+            'delivery' => 'sent',
+            'typedDecision' => ['approvalId' => $approval['approvalId'], 'optionId' => $match['optionId'], 'decision' => $match['decision'], 'state' => $decided['approval']['state']],
+        ];
+    }
+
+    /**
+     * The thread's HITL items in seq order (order of first appearance), as
+     * fancy-chat-js `pickActionable` takes them.
+     *
+     * @param  array<string, mixed>  $state
+     * @return list<array{id: string, kind: string, state: string, seq: int}>
+     */
+    private function hitlItems(array $state): array
+    {
+        $items = [];
+        foreach ($state['order'] as $index => $ref) {
+            if ($ref['kind'] === 'approval') {
+                $record = $this->findRecord($state, 'approvals', 'approvalId', $ref['id']);
+            } elseif ($ref['kind'] === 'question') {
+                $record = $this->findRecord($state, 'questions', 'questionId', $ref['id']);
+            } else {
+                continue;
+            }
+            $items[] = ['id' => $ref['id'], 'kind' => $ref['kind'], 'state' => (string) ($record['state'] ?? 'open'), 'seq' => $index];
+        }
+
+        return $items;
+    }
+
+    // ------------------------------------------------------------- undo
+
+    /**
+     * Opens an undo window for an action the host just took. `$windowMs` is the
+     * host's choice per action (default undo.default_ms), capped at undo.max_ms.
+     */
+    public function openUndo(string $threadId, string $kind, string $label, ?int $windowMs = null): string
+    {
+        $this->assertThreadId($threadId);
+        if (! isset($this->undoables[$kind])) {
+            throw new ChatException('undo.kind', 422);
+        }
+        $window = max(1, min($windowMs ?? (int) $this->cfg('undo.default_ms', 30000), (int) $this->cfg('undo.max_ms', 600000)));
+        $actionId = 'ud_'.bin2hex(random_bytes(8));
+        $deadline = $this->now() + $window;
+        $this->store->openUndo($actionId, $threadId, $kind, $deadline);
+        $this->append($threadId, ['type' => 'undo.opened', 'data' => ['actionId' => $actionId, 'label' => $label, 'deadline' => $this->iso($deadline)]]);
+
+        return $actionId;
+    }
+
+    /**
+     * A human reverts inside the window. The revert and the deadline's commit
+     * each claim the window atomically, so exactly one of them runs, once.
+     *
+     * @return array{undo: array<string, mixed>, seq: int}
+     */
+    public function revertUndo(Request $request, string $actionId): array
+    {
+        $actor = $this->resolveActor($request);
+        $this->requireHuman($actor);
+        $action = $this->store->undoAction($actionId) ?? throw new ChatException('undo.unknown', 404);
+        $threadId = $action['threadId'];
+        $this->authorize($request, $threadId, 'write');
+        if ($action['state'] !== 'open') {
+            throw new ChatException('undo.state', 409);
+        }
+        if ($this->now() >= $action['deadlineMs']) {
+            throw new ChatException('undo.expired', 409);
+        }
+        $undoable = $this->undoables[$action['kind']] ?? throw new ChatException('undo.kind', 409);
+        if (! $this->store->claimUndo($actionId, 'open', 'reverting')) {
+            throw new ChatException('undo.state', 409);
+        }
+        try {
+            $undoable->revert($actionId, $threadId);
+        } catch (Throwable $e) {
+            $this->report($e);
+            $this->store->setUndoState($actionId, 'open');
+
+            throw new ChatException('undo.revert', 500);
+        }
+        $event = $this->append($threadId, ['type' => 'undo.reverted', 'actor' => $actor, 'data' => ['actionId' => $actionId, 'revertedBy' => $actor]]);
+        $this->store->setUndoState($actionId, 'reverted');
+
+        return ['undo' => $this->findRecord($this->snapshot($threadId), 'undos', 'actionId', $actionId), 'seq' => $event['seq']];
+    }
+
+    /** Commits every window whose deadline has passed. Each commit runs once; a throw leaves it open for the next run. */
+    public function commitExpiredUndos(): int
+    {
+        $count = 0;
+        foreach ($this->store->expiredUndos($this->now(), max(1, (int) $this->cfg('undo.batch', 200))) as $action) {
+            $undoable = $this->undoables[$action['kind']] ?? null;
+            if ($undoable === null || ! $this->store->claimUndo($action['actionId'], 'open', 'committing')) {
+                continue;
+            }
+            try {
+                $undoable->commit($action['actionId'], $action['threadId']);
+            } catch (Throwable $e) {
+                $this->report($e);
+                $this->store->setUndoState($action['actionId'], 'open');
+
+                continue;
+            }
+            $this->append($action['threadId'], ['type' => 'undo.committed', 'data' => ['actionId' => $action['actionId']]]);
+            $this->store->setUndoState($action['actionId'], 'committed');
+            $count++;
+        }
+
+        return $count;
     }
 
     /** @param  array<string, mixed>  $state */
@@ -604,6 +830,18 @@ final class FancyChat
                     $v = Parts::validate($data['part'], 'agent', $this->partLimits());
                     $error = $v['ok'] ? null : $v['error'];
                 }
+                break;
+            case 'plan.updated':
+                // A held step releases only through its approval: refused BEFORE it is appended.
+                if (! Json::isList($data['steps'] ?? null)) {
+                    $error = 'plan.steps';
+                    break;
+                }
+                $state = $this->snapshot($threadId);
+                $runId = is_string($raw['runId'] ?? null) ? $raw['runId'] : '_';
+                $previous = $this->findRecord($state, 'plans', 'runId', $runId)['steps'] ?? [];
+                $check = Plan::check($previous, $data['steps'], $state['approvals']);
+                $error = $check['ok'] ? null : $check['error'];
                 break;
             case 'approval.requested':
                 [$record, $error] = $this->approvalRecord($data['approval'] ?? null, $turnId, $raw['runId'] ?? null);
@@ -954,6 +1192,7 @@ final class FancyChat
      */
     public function reap(): int
     {
+        $this->commitExpiredUndos();
         $timeout = max(0, (int) $this->cfg('reaper.timeout_ms', 600000));
         $includeParked = (bool) $this->cfg('reaper.include_parked', false);
         $count = 0;

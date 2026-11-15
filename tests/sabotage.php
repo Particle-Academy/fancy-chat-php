@@ -18,6 +18,14 @@ declare(strict_types=1);
 $root = dirname(__DIR__);
 
 /** @var list<array{0: string, 1: string, 2: string, 3: string}> [name, file, search, replace] */
+/*
+ * Removed as provably equivalent (2026-11-15): FancyChat::typedDecision's own
+ * `typed_approval.enabled` check. TypedApproval::match() refuses whenever the
+ * config is not enabled (merged over TypedApproval::DEFAULT, which is off), and
+ * typedDecision passes it the same config, so dropping the early exit cannot
+ * change any outcome. The match-level check is mutated above ('typed approval
+ * ignores enabled') and caught.
+ */
 $mutations = [
     // The contract port.
     ['unknown major accepted', 'src/Contract/Envelope.php', '(int) $e[\'v\'] !== 1', '(int) $e[\'v\'] === 99'],
@@ -105,6 +113,38 @@ $mutations = [
     ['poll wait unclamped', 'src/FancyChat.php', "min(\$waitMs, (int) \$this->cfg('poll.max_wait_ms', 30000))", '$waitMs'],
     ['sse never heartbeats', 'src/FancyChat.php', "\$write(\": heartbeat\\n\\n\");", ';'],
     ['sse ignores Last-Event-ID', 'src/Http/ChatController.php', "\$request->headers->get('Last-Event-ID') ?? \$request->query('after')", "\$request->query('after')"],
+    ['typed approval on by default', 'src/Contract/TypedApproval.php', "public const array DEFAULT = ['enabled' => false,", "public const array DEFAULT = ['enabled' => true,"],
+    ['typed approval ignores enabled', 'src/Contract/TypedApproval.php', "if (\$cfg['enabled'] !== true || \$approval === null", 'if ($approval === null'],
+    ['typed approval matches any state', 'src/Contract/TypedApproval.php', "|| (\$approval['state'] ?? null) !== 'pending') {", ') {'],
+    ['typing can grant always', 'src/Contract/TypedApproval.php', "(\$option['kind'] ?? null) === \$once && ", ''],
+    ['typed phrase inside a sentence', 'src/Contract/TypedApproval.php', "if (is_string(\$phrase) && self::normalize(\$phrase) === \$typed) {\n                \$decision = 'approve';", "if (is_string(\$phrase) && str_contains(\$typed, self::normalize(\$phrase))) {\n                \$decision = 'approve';"],
+    ['no NFKC fold', 'src/Contract/TypedApproval.php', 'Normalizer::normalize($text, Normalizer::FORM_KC)', '$text'],
+    ['trailing punctuation kept', 'src/Contract/TypedApproval.php', "while (\$end > 0 && in_array(\$chars[\$end - 1], self::TRAILING_PUNCTUATION, true)) {\n            \$end--;", "while (false) {\n            \$end--;"],
+    ['typed decision delivered as a message', 'src/FancyChat.php', "\$match = TypedApproval::match(\$parts[0]['text'], \$approval, \$config);\n        if (\$match === null || \$approval === null) {", "\$match = null;\n        if (\$match === null || \$approval === null) {"],
+    ['typed decision failure keeps the message', 'src/FancyChat.php', "\$this->append(\$threadId, ['type' => 'delivery.changed', 'data' => ['messageId' => \$messageId, 'action' => 'drop']]);", ';'],
+    ['undo open at the deadline', 'src/Contract/Undo.php', "'canRevert' => \$remaining > 0]", "'canRevert' => \$remaining >= 0]"],
+    ['undo accepts any deadline', 'src/Contract/Undo.php', "if (! Envelope::isTimestamp(\$value)) {", "if (! is_string(\$value)) {"],
+    ['an agent reverts in the projection', 'src/Contract/Projection.php', "\$type === 'undo.committed' || self::decidedByActor(\$event, \$data['revertedBy'] ?? null)", 'true'],
+    ['undo closes twice', 'src/Contract/Projection.php', "\$state['undos'][\$i]['state'] !== 'open' || ! \$allowed", '! $allowed'],
+    ['an agent reverts on the server', 'src/FancyChat.php', "\$this->requireHuman(\$actor);\n        \$action = \$this->store->undoAction(\$actionId)", "\$action = \$this->store->undoAction(\$actionId)"],
+    ['revert at the deadline', 'src/FancyChat.php', "if (\$this->now() >= \$action['deadlineMs']) {", "if (\$this->now() > \$action['deadlineMs']) {"],
+    ['revert without the lock', 'src/FancyChat.php', "if (! \$this->store->claimUndo(\$actionId, 'open', 'reverting')) {", 'if (false) {'],
+    ['commit without the lock', 'src/FancyChat.php', "\$undoable === null || ! \$this->store->claimUndo(\$action['actionId'], 'open', 'committing')", '$undoable === null'],
+    ['unregistered undo kind opened', 'src/FancyChat.php', "if (! isset(\$this->undoables[\$kind])) {\n            throw new ChatException('undo.kind', 422);", "if (false) {\n            throw new ChatException('undo.kind', 422);"],
+    ['undo window unclamped', 'src/FancyChat.php', "min(\$windowMs ?? (int) \$this->cfg('undo.default_ms', 30000), (int) \$this->cfg('undo.max_ms', 600000))", "\$windowMs ?? (int) \$this->cfg('undo.default_ms', 30000)"],
+    ['reaper skips undo windows', 'src/FancyChat.php', "\$this->commitExpiredUndos();\n        \$timeout", "\$timeout"],
+    ['anyone supersedes', 'src/FancyChat.php', "\n                || (\$target['author']['kind'] ?? null) !== \$actor['kind'] || (\$target['author']['id'] ?? null) !== \$actor['id']", ''],
+    ['assistant messages superseded', 'src/FancyChat.php', "(\$target['role'] ?? null) !== 'user'", 'false'],
+    ['truncate never runs', 'src/FancyChat.php', "        \$created = \$this->append(\$threadId, ['type' => 'message.created', 'actor' => \$actor, 'data' => ['message' => \$message]]);\n        if (\$supersedes !== null && \$policy === 'truncate') {", "        \$created = \$this->append(\$threadId, ['type' => 'message.created', 'actor' => \$actor, 'data' => ['message' => \$message]]);\n        if (false) {"],
+    ['truncate never runs when queued', 'src/FancyChat.php', "            \$created = \$this->append(\$threadId, ['type' => 'message.created', 'actor' => \$actor, 'data' => ['message' => \$message]]);\n            if (\$supersedes !== null && \$policy === 'truncate') {", "            \$created = \$this->append(\$threadId, ['type' => 'message.created', 'actor' => \$actor, 'data' => ['message' => \$message]]);\n            if (false) {"],
+    ['truncate keeps pending approvals', 'src/FancyChat.php', "if (in_array(\$a['approvalId'], \$rowIds, true) && \$a['state'] === 'pending'", 'if (false'],
+    ['any edit-resend policy accepted', 'src/FancyChat.php', "if (! in_array(\$policy, ['branch', 'truncate'], true)) {", 'if (false) {'],
+    ['server lets a held step go', 'src/FancyChat.php', "\$error = \$check['ok'] ? null : \$check['error'];", '$error = null;'],
+    ['held step released while pending', 'src/Contract/Plan.php', "if (in_array(\$approval['state'] ?? null, self::RELEASED_BY, true)) {", "if ((\$approval['state'] ?? null) !== 'deciding') {"],
+    ['dropping a held step releases it', 'src/Contract/Plan.php', "if (\$after === null) {\n                return ['ok' => false, 'error' => 'plan.held'];", "if (\$after === null) {\n                continue;"],
+    ['rejected step may run', 'src/Contract/Plan.php', "in_array(\$approval['state'] ?? null, self::REFUSED_BY, true) && in_array(\$after['status'], ['skipped', 'failed'], true)", "in_array(\$approval['state'] ?? null, self::REFUSED_BY, true)"],
+    ['projection skips the plan guard', 'src/Contract/Projection.php', "if (! Plan::check(\$i === null ? [] : \$state['plans'][\$i]['steps'], \$data['steps'], \$state['approvals'])['ok']) {", 'if (false) {'],
+    ['branch rows not recorded', 'src/Contract/Projection.php', "\$state['branches'][] = [", '$unused[] = ['],
     ['wire sends [] for an empty map', 'src/Contract/Json.php', "if ((\$key !== null && in_array(\$key, self::MAP_KEYS, true)) || \$inMapList) {", 'if (false) {'],
 ];
 

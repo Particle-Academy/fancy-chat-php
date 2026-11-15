@@ -21,6 +21,8 @@ No Prism dependency.
 | `src/Http/ChatController.php` | Thin HTTP. Every JSON body goes through `Json::encode`. |
 | `src/Jobs/RunTurn.php` | The queued turn. |
 | `tests/sabotage.php` | One mutation at a time; every one must turn the suite red. |
+| `src/Undoable.php`, `src/Console/CommitUndoCommand.php` | Undo windows: the host's commit/revert, and the committer. |
+| `tests/e2e/serve.php` | The `php -S` router for end-to-end clients (SQLite file, `X-E2E-User`). |
 
 ## Invariants (each has a test, and a sabotage entry that proves it)
 
@@ -45,11 +47,22 @@ No Prism dependency.
    `tests/Fixtures/uses-prism`.
 9. **The suite never touches a real database**: `TestApp` forces in-memory
    SQLite (the concurrency test uses its own temp file) and blanks provider keys.
+10. **Typed approval is the decide path, not a shortcut.** `typedDecision` calls
+    `decide()` with the same request, so the actor, access check, lock and staged
+    write are identical; off and phraseless unless the host configures it.
+11. **An undo window runs commit or revert exactly once.** Both claim `open` in
+    `fancy_chat_undo`; never call the host's Undoable without winning the claim.
+12. **A held plan step releases only through its approval**, checked before a
+    backend's `plan.updated` is appended (`Contract\Plan`), and again by the projection.
 
-## Known limits (P1)
+## Known limits
 
 - The snapshot is a fold of the checkpoint plus retained events on every call.
   That is correct but O(retained events); a cached projection is a later
   optimisation.
-- Typed approval, the undo window, edit-and-resend branching policy and
-  plan-step HITL are P2.
+- `truncate` retracts the branch and withdraws its pending approvals, but does
+  not cancel a turn the branch left parked; the new message queues behind it
+  until the host cancels or the reaper (with `include_parked`) settles it.
+- A typed decision is recorded with delivery `sent`, because the contract's
+  delivery states have no "taken as a decision"; the link is the
+  `x-fancy-chat.typed-decision` event and the `typedDecision` response field.

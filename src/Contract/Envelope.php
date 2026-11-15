@@ -33,6 +33,12 @@ final class Envelope
 
     private const array OPTIONAL_IDS = ['runId', 'turnId', 'parentRunId', 'rootRunId'];
 
+    /** An ISO 8601 timestamp with a zone, as every `at` and deadline carries. */
+    public static function isTimestamp(mixed $value): bool
+    {
+        return is_string($value) && preg_match(self::TIMESTAMP, $value) === 1;
+    }
+
     public static function isEventType(mixed $type): bool
     {
         return is_string($type) && (in_array($type, self::CORE_TYPES, true) || preg_match(self::EXTENSION, $type) === 1);
@@ -57,7 +63,7 @@ final class Envelope
         if (! self::isEventType($e['type'] ?? null)) {
             return ['ok' => false, 'error' => 'event.type'];
         }
-        if (! is_string($e['at'] ?? null) || preg_match(self::TIMESTAMP, $e['at']) !== 1) {
+        if (! self::isTimestamp($e['at'] ?? null)) {
             return ['ok' => false, 'error' => 'event.at'];
         }
         $actor = $e['actor'] ?? null;

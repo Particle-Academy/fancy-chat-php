@@ -58,6 +58,32 @@ return [
         'confirm_wait_ms' => 2000,
     ],
 
+    /*
+     * Typed approval: a human typing an exact phrase while an approval is the
+     * one actionable item takes the same decide path as the button. OPT-IN per
+     * app, and no phrases until you set them (FancyChat\Contract\TypedApproval::ENGLISH
+     * is there to opt into). Matching is deterministic, never a model.
+     */
+    'typed_approval' => [
+        'enabled' => false,
+        'locale' => 'en',
+        'phrases' => [],
+    ],
+
+    'undo' => [
+        /* The window when openUndo() is given none. The host picks one per action. */
+        'default_ms' => 30000,
+        /* No window is longer than this. */
+        'max_ms' => 600000,
+        /* Windows committed per run of fancy-chat:commit-undo (and the reaper). */
+        'batch' => 200,
+    ],
+
+    'edit_resend' => [
+        /* `branch` keeps the superseded rows (shown on demand); `truncate` retracts them and withdraws their pending approvals. */
+        'policy' => 'branch',
+    ],
+
     'hitl' => [
         /* The coordination scope for "one actionable item": `thread` or `app`. Read by the client. */
         'scope' => 'thread',

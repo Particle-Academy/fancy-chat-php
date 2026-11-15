@@ -29,6 +29,7 @@
     ],
     "require": {
         "php": "^8.4",
+        "ext-intl": "*",
         "ext-json": "*",
         "ext-mbstring": "*",
         "illuminate/broadcasting": "^13.0",

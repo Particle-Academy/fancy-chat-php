@@ -22,7 +22,7 @@ final class Json
     /** Fields whose value is a list of JSON objects on the wire. */
     private const array LIST_OF_MAP_KEYS = [
         'rows', 'columns', 'options', 'fields', 'actions', 'steps', 'preview', 'parts', 'body', 'series',
-        'order', 'messages', 'turns', 'thinking', 'tools', 'plans', 'approvals', 'questions', 'events',
+        'order', 'messages', 'turns', 'thinking', 'tools', 'plans', 'approvals', 'questions', 'events', 'undos', 'branches',
     ];
 
     /** A JSON object as PHP decodes it: an associative array, or the empty array. */

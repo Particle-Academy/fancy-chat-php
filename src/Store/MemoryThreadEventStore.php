@@ -110,4 +110,42 @@ final class MemoryThreadEventStore implements ThreadEventStore
     {
         return array_keys(array_filter($this->touched, fn (int $at): bool => $at <= $beforeMs));
     }
+
+    /** @var array<string, array{actionId: string, threadId: string, kind: string, deadlineMs: int, state: string}> */
+    private array $undo = [];
+
+    public function openUndo(string $actionId, string $threadId, string $kind, int $deadlineMs): void
+    {
+        $this->undo[$actionId] = ['actionId' => $actionId, 'threadId' => $threadId, 'kind' => $kind, 'deadlineMs' => $deadlineMs, 'state' => 'open'];
+    }
+
+    public function undoAction(string $actionId): ?array
+    {
+        return $this->undo[$actionId] ?? null;
+    }
+
+    public function claimUndo(string $actionId, string $from, string $to): bool
+    {
+        if (($this->undo[$actionId]['state'] ?? null) !== $from) {
+            return false;
+        }
+        $this->undo[$actionId]['state'] = $to;
+
+        return true;
+    }
+
+    public function setUndoState(string $actionId, string $state): void
+    {
+        if (isset($this->undo[$actionId])) {
+            $this->undo[$actionId]['state'] = $state;
+        }
+    }
+
+    public function expiredUndos(int $nowMs, int $limit): array
+    {
+        $due = array_values(array_filter($this->undo, fn (array $u): bool => $u['state'] === 'open' && $u['deadlineMs'] <= $nowMs));
+        usort($due, fn (array $a, array $b): int => [$a['deadlineMs'], $a['actionId']] <=> [$b['deadlineMs'], $b['actionId']]);
+
+        return array_slice($due, 0, max(0, $limit));
+    }
 }

@@ -46,4 +46,18 @@ interface ThreadEventStore
 
     /** @return list<string> threads whose last append was at or before `$beforeMs` */
     public function staleThreads(int $beforeMs): array;
+
+    /** Records an open undo window. `state` starts as `open`. */
+    public function openUndo(string $actionId, string $threadId, string $kind, int $deadlineMs): void;
+
+    /** @return array{actionId: string, threadId: string, kind: string, deadlineMs: int, state: string}|null */
+    public function undoAction(string $actionId): ?array;
+
+    /** Atomically moves an undo window from one state to another; false if it was not in `$from`. */
+    public function claimUndo(string $actionId, string $from, string $to): bool;
+
+    public function setUndoState(string $actionId, string $state): void;
+
+    /** @return list<array{actionId: string, threadId: string, kind: string, deadlineMs: int, state: string}> open windows whose deadline is at or before `$nowMs`, oldest first */
+    public function expiredUndos(int $nowMs, int $limit): array;
 }

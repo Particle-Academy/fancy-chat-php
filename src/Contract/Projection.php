@@ -19,7 +19,7 @@ final class Projection
     /** @return array<string, mixed> */
     public static function emptyState(): array
     {
-        return ['lastSeq' => 0, 'illegal' => 0, 'order' => [], 'messages' => [], 'turns' => [], 'thinking' => [], 'tools' => [], 'plans' => [], 'approvals' => [], 'questions' => []];
+        return ['lastSeq' => 0, 'illegal' => 0, 'order' => [], 'messages' => [], 'turns' => [], 'thinking' => [], 'tools' => [], 'plans' => [], 'approvals' => [], 'questions' => [], 'undos' => [], 'branches' => []];
     }
 
     /** @param  list<array<string, mixed>>  $list */
@@ -84,6 +84,15 @@ final class Projection
                     break;
                 }
                 $supersedes = is_string($m['supersedes'] ?? null) ? $m['supersedes'] : null;
+                $targetAt = null;
+                if ($supersedes !== null) {
+                    foreach ($state['order'] as $k => $ref) {
+                        if ($ref['kind'] === 'message' && $ref['id'] === $supersedes) {
+                            $targetAt = $k;
+                            break;
+                        }
+                    }
+                }
                 $state['messages'][] = [
                     'id' => $m['id'],
                     'role' => is_string($m['role'] ?? null) ? $m['role'] : 'assistant',
@@ -101,6 +110,14 @@ final class Projection
                     if ($t !== null) {
                         $state['messages'][$t]['superseded'] = true;
                     }
+                }
+                if ($supersedes !== null && $targetAt !== null) {
+                    // Edit and resend: the rows the new message replaces. The host's policy decides their fate.
+                    $state['branches'][] = [
+                        'supersededId' => $supersedes,
+                        'byId' => $m['id'],
+                        'rowIds' => array_values(array_map(fn (array $ref): string => $ref['id'], array_slice($state['order'], $targetAt + 1))),
+                    ];
                 }
                 $state['order'][] = ['kind' => 'message', 'id' => $m['id']];
                 break;
@@ -248,6 +265,11 @@ final class Projection
                 }
                 $runId = $event['runId'] ?? self::NO_RUN;
                 $i = self::indexOf($state['plans'], 'runId', $runId);
+                // A held step releases only through its approval.
+                if (! Plan::check($i === null ? [] : $state['plans'][$i]['steps'], $data['steps'], $state['approvals'])['ok']) {
+                    $illegal();
+                    break;
+                }
                 if ($i === null) {
                     $state['plans'][] = ['runId' => $runId, 'steps' => []];
                     $state['order'][] = ['kind' => 'plan', 'id' => $runId];
@@ -357,8 +379,29 @@ final class Projection
                 $state['questions'][$i]['notes'] = Json::isObject($data['notes'] ?? null) ? $data['notes'] : [];
                 break;
 
+            case 'undo.opened':
+                if (! is_string($data['actionId'] ?? null) || ! is_string($data['label'] ?? null) || ! Envelope::isTimestamp($data['deadline'] ?? null) || self::indexOf($state['undos'], 'actionId', $data['actionId']) !== null) {
+                    $illegal();
+                    break;
+                }
+                $state['undos'][] = ['actionId' => $data['actionId'], 'label' => $data['label'], 'deadline' => $data['deadline'], 'state' => 'open'];
+                $state['order'][] = ['kind' => 'undo', 'id' => $data['actionId']];
+                break;
+
+            case 'undo.committed':
+            case 'undo.reverted':
+                $i = self::indexOf($state['undos'], 'actionId', $data['actionId'] ?? null);
+                // Only the human reverts; the host (or its timer) commits.
+                $allowed = $type === 'undo.committed' || self::decidedByActor($event, $data['revertedBy'] ?? null);
+                if ($i === null || $state['undos'][$i]['state'] !== 'open' || ! $allowed) {
+                    $illegal();
+                    break;
+                }
+                $state['undos'][$i]['state'] = $type === 'undo.committed' ? 'committed' : 'reverted';
+                break;
+
             default:
-                // Runs, usage, agent status, undo, handoff and x-* events carry no row.
+                // Runs, usage, agent status, handoff and x-* events carry no row.
                 break;
         }
 
@@ -414,6 +457,12 @@ final class Projection
                     $i = self::indexOf($state['questions'], 'questionId', $id);
                     if ($i !== null) {
                         $rows[] = ['kind' => 'question', 'id' => $id, 'questionId' => $id, 'state' => $state['questions'][$i]['state'] ?? 'open'];
+                    }
+                    break;
+                case 'undo':
+                    $i = self::indexOf($state['undos'], 'actionId', $id);
+                    if ($i !== null) {
+                        $rows[] = ['kind' => 'undo', 'id' => $id] + $state['undos'][$i];
                     }
                     break;
             }

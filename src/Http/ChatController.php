@@ -113,4 +113,9 @@ final class ChatController
     {
         return $this->guard(fn (): Response => $this->json(200, $this->chat->answer($request, $question, $this->body($request))));
     }
+
+    public function revertUndo(Request $request, string $action): Response
+    {
+        return $this->guard(fn (): Response => $this->json(200, $this->chat->revertUndo($request, $action)));
+    }
 }

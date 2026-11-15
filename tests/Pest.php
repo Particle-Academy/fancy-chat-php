@@ -5,6 +5,7 @@ declare(strict_types=1);
 use FancyChat\Backend\NullBackend;
 use FancyChat\Backend\TurnInput;
 use FancyChat\FancyChat;
+use FancyChat\StagedWrite;
 use FancyChat\Tests\Support\TestApp;
 use Illuminate\Container\Container;
 use Illuminate\Foundation\Application;
@@ -152,4 +153,61 @@ function pollAll(string $thread, int $after = 0): array
     }
 
     return $events;
+}
+
+/** A staged write that counts its applies. */
+final class CountingWrite implements StagedWrite
+{
+    /** @var list<array{approval: array<string, mixed>, decision: string, edited: mixed}> */
+    public array $applied = [];
+
+    public function __construct(private bool $succeed = true) {}
+
+    public function preview(array $proposal): array
+    {
+        return [['id' => 'pv', 'kind' => 'text', 'format' => 'plain', 'text' => 'Send to '.($proposal['to'] ?? '?')]];
+    }
+
+    public function apply(array $approval, string $decision, mixed $edited = null): array
+    {
+        $this->applied[] = ['approval' => $approval, 'decision' => $decision, 'edited' => $edited];
+
+        return $this->succeed ? ['ok' => true] : ['ok' => false, 'error' => 'smtp.down'];
+    }
+}
+
+/**
+ * A backend that asks for approval and parks, then finishes on resume. It
+ * records every input it was started with.
+ */
+function approvalBackend(array &$inputs, string $stagedWrite = 'send-email'): NullBackend
+{
+    return new NullBackend(function (TurnInput $input) use (&$inputs, $stagedWrite): iterable {
+        $inputs[] = $input;
+        if ($input->kind === 'resume') {
+            yield ['type' => 'message.created', 'data' => ['message' => ['id' => 'done_'.$input->turnId, 'role' => 'assistant', 'parts' => [['id' => 'p', 'kind' => 'text', 'format' => 'plain', 'text' => 'Done.']]]]];
+
+            return;
+        }
+        yield ['type' => 'approval.requested', 'data' => ['approval' => [
+            'approvalId' => 'ap_'.$input->turnId,
+            'title' => 'Send the email?',
+            'summary' => 'To 3 recipients',
+            'stagedWrite' => $stagedWrite,
+            'proposal' => ['to' => 'team'],
+            'options' => [['id' => 'yes', 'kind' => 'allow-once', 'label' => 'Send'], ['id' => 'no', 'kind' => 'reject-once', 'label' => 'Cancel'], ['id' => 'edit', 'kind' => 'edit', 'label' => 'Edit']],
+        ]]];
+        yield ['type' => 'turn.transition', 'data' => ['action' => 'park']];
+    }, ['steering' => false, 'cancel' => true, 'approvals' => true]);
+}
+
+/** Start a parked turn and return [approvalId, turnId]. */
+function parkedApproval(array &$inputs, ?CountingWrite $write = null): array
+{
+    bindHost()->backend(approvalBackend($inputs))->stagedWrite('send-email', $write ?? new CountingWrite);
+    http('POST', '/fancy-chat/threads/t_1/messages', textMessage('email the team'), 'human:u_1');
+    $state = chat()->snapshot('t_1');
+    expect($state['turns'][0]['state'])->toBe('awaiting-human');
+
+    return [$state['approvals'][0]['approvalId'], $state['turns'][0]['turnId']];
 }

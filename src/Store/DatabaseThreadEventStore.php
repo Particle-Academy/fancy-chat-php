@@ -119,4 +119,45 @@ final class DatabaseThreadEventStore implements ThreadEventStore
     {
         return $this->conn()->table('fancy_chat_threads')->where('touched_at', '<=', $beforeMs)->orderBy('thread_id')->pluck('thread_id')->all();
     }
+
+    public function openUndo(string $actionId, string $threadId, string $kind, int $deadlineMs): void
+    {
+        $this->conn()->table('fancy_chat_undo')->insert(['action_id' => $actionId, 'thread_id' => $threadId, 'kind' => $kind, 'deadline_ms' => $deadlineMs, 'state' => 'open']);
+    }
+
+    public function undoAction(string $actionId): ?array
+    {
+        $row = $this->conn()->table('fancy_chat_undo')->where('action_id', $actionId)->first();
+
+        return $row === null ? null : self::undoRow($row);
+    }
+
+    public function claimUndo(string $actionId, string $from, string $to): bool
+    {
+        return $this->conn()->table('fancy_chat_undo')->where('action_id', $actionId)->where('state', $from)->update(['state' => $to]) === 1;
+    }
+
+    public function setUndoState(string $actionId, string $state): void
+    {
+        $this->conn()->table('fancy_chat_undo')->where('action_id', $actionId)->update(['state' => $state]);
+    }
+
+    public function expiredUndos(int $nowMs, int $limit): array
+    {
+        return $this->conn()->table('fancy_chat_undo')
+            ->where('state', 'open')
+            ->where('deadline_ms', '<=', $nowMs)
+            ->orderBy('deadline_ms')
+            ->orderBy('action_id')
+            ->limit($limit)
+            ->get()
+            ->map(fn (object $row): array => self::undoRow($row))
+            ->all();
+    }
+
+    /** @return array{actionId: string, threadId: string, kind: string, deadlineMs: int, state: string} */
+    private static function undoRow(object $row): array
+    {
+        return ['actionId' => (string) $row->action_id, 'threadId' => (string) $row->thread_id, 'kind' => (string) $row->kind, 'deadlineMs' => (int) $row->deadline_ms, 'state' => (string) $row->state];
+    }
 }
