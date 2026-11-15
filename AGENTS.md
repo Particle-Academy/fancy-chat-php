@@ -54,15 +54,15 @@ No Prism dependency.
     `fancy_chat_undo`; never call the host's Undoable without winning the claim.
 12. **A held plan step releases only through its approval**, checked before a
     backend's `plan.updated` is appended (`Contract\Plan`), and again by the projection.
+13. **Truncate cancels what the removed branch left behind**
+    (`Projection::turnsToCancelForBranch`, the fixture's `branchTurns`): a parked
+    turn is settled here (nothing of it runs), a running one is cancelled through the
+    backend and settled only on `ok`. Then the new message starts, not queues.
+14. **A typed decision's message is `decided`**, a final delivery state, so it can
+    never be delivered to the agent afterwards.
 
 ## Known limits
 
 - The snapshot is a fold of the checkpoint plus retained events on every call.
   That is correct but O(retained events); a cached projection is a later
   optimisation.
-- `truncate` retracts the branch and withdraws its pending approvals, but does
-  not cancel a turn the branch left parked; the new message queues behind it
-  until the host cancels or the reaper (with `include_parked`) settles it.
-- A typed decision is recorded with delivery `sent`, because the contract's
-  delivery states have no "taken as a decision"; the link is the
-  `x-fancy-chat.typed-decision` event and the `typedDecision` response field.

@@ -411,6 +411,50 @@ final class Projection
     }
 
     /**
+     * Under the truncate policy, the turns a removed branch must cancel: every
+     * UNSETTLED turn the branch references, through a message in it (the
+     * superseded message included) or an approval placed in it, in `turns`
+     * order. Settled turns and turns outside the branch are never touched.
+     * fancy-chat-js `turnsToCancelForBranch`.
+     *
+     * @param  array<string, mixed>  $state
+     * @return list<string>
+     */
+    public static function turnsToCancelForBranch(array $state, string $supersededId): array
+    {
+        $branch = null;
+        foreach ($state['branches'] ?? [] as $b) {
+            if ($b['supersededId'] === $supersededId) {
+                $branch = $b;
+                break;
+            }
+        }
+        if ($branch === null) {
+            return [];
+        }
+        $ids = array_flip(array_merge([$supersededId], $branch['rowIds']));
+        $referenced = [];
+        foreach ($state['messages'] as $m) {
+            if (isset($ids[$m['id']]) && is_string($m['turnId'] ?? null)) {
+                $referenced[$m['turnId']] = true;
+            }
+        }
+        foreach ($state['approvals'] as $a) {
+            if (isset($ids[$a['approvalId']]) && is_string($a['turnId'] ?? null)) {
+                $referenced[$a['turnId']] = true;
+            }
+        }
+        $out = [];
+        foreach ($state['turns'] as $t) {
+            if ($t['state'] !== 'settled' && isset($referenced[$t['turnId']])) {
+                $out[] = $t['turnId'];
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * The rows a thread renders, in order of first appearance.
      *
      * @param  array<string, mixed>  $state

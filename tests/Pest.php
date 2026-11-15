@@ -180,7 +180,8 @@ final class CountingWrite implements StagedWrite
  * A backend that asks for approval and parks, then finishes on resume. It
  * records every input it was started with.
  */
-function approvalBackend(array &$inputs, string $stagedWrite = 'send-email'): NullBackend
+/** @param  array{steering: bool, cancel: bool, approvals: bool}  $capabilities */
+function approvalBackend(array &$inputs, string $stagedWrite = 'send-email', array $capabilities = ['steering' => false, 'cancel' => true, 'approvals' => true]): NullBackend
 {
     return new NullBackend(function (TurnInput $input) use (&$inputs, $stagedWrite): iterable {
         $inputs[] = $input;
@@ -198,7 +199,7 @@ function approvalBackend(array &$inputs, string $stagedWrite = 'send-email'): Nu
             'options' => [['id' => 'yes', 'kind' => 'allow-once', 'label' => 'Send'], ['id' => 'no', 'kind' => 'reject-once', 'label' => 'Cancel'], ['id' => 'edit', 'kind' => 'edit', 'label' => 'Edit']],
         ]]];
         yield ['type' => 'turn.transition', 'data' => ['action' => 'park']];
-    }, ['steering' => false, 'cancel' => true, 'approvals' => true]);
+    }, $capabilities);
 }
 
 /** Start a parked turn and return [approvalId, turnId]. */

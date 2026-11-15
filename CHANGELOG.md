@@ -8,6 +8,17 @@ version number is not a stability promise until 1.0; read the entry.
 
 ## [Unreleased]
 
+### Fixed (since the phase 2 entries below, all unreleased)
+
+- **Truncate cancels the turn a removed branch left parked.** Before, the new
+  message queued behind a turn nobody could reach. A parked turn is settled
+  `cancelled` (it has nothing running), a running one is cancelled through the
+  backend, and the new message then starts its own turn.
+- **A typed decision's message is now `decided`**, the contract's new final
+  delivery state, and `POST messages` answers `delivery: "decided"` for it.
+  It was recorded as `sent`, which read as delivered to the agent.
+- Contract re-vendored: fixture `5ce5595a...`, machines `78959500...`.
+
 ### Added
 
 - **First release: the Laravel server for the neutral agent-chat contract**

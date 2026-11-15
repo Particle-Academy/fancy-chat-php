@@ -64,12 +64,13 @@ it('takes a typed phrase as the human decision, through the same decide path, an
 
     $r = http('POST', '/fancy-chat/threads/t_1/messages', textMessage('  Yes, approve! '), 'human:u_1');
     expect($r['status'])->toBe(201)
-        ->and($r['body']['delivery'])->toBe('sent')
+        ->and($r['body']['delivery'])->toBe('decided')
         ->and($r['body']['typedDecision'])->toBe(['approvalId' => $approvalId, 'optionId' => 'yes', 'decision' => 'approve', 'state' => 'applied']);
 
     $state = chat()->snapshot('t_1');
     $typed = collect($state['messages'])->firstWhere('id', $r['body']['messageId']);
-    expect($typed['delivery'])->toBe('sent')
+    // Taken as the decision: `decided`, a final state, so it can never be delivered later.
+    expect($typed['delivery'])->toBe('decided')
         ->and($state['approvals'][0]['state'])->toBe('applied')
         ->and($state['approvals'][0]['decidedBy'])->toBe(['kind' => 'human', 'id' => 'u_1'])
         ->and($write->applied)->toHaveCount(1);
@@ -288,6 +289,50 @@ it('truncate retracts every message in the superseded branch and withdraws its p
     expect(collect($state['approvals'])->firstWhere('approvalId', $approvalId)['state'])->toBe('withdrawn')
         ->and(collect($state['messages'])->firstWhere('id', $r['body']['messageId'])['retracted'])->toBeFalse()
         ->and(collect($state['messages'])->firstWhere('id', $first)['retracted'])->toBeFalse();
+});
+
+it('truncate cancels the turn the removed branch left parked, then starts the new message', function (): void {
+    chatApp(['fancy-chat.edit_resend.policy' => 'truncate']);
+    $inputs = [];
+    bindHost()->backend(approvalBackend($inputs))->stagedWrite('send-email', new CountingWrite);
+    $first = http('POST', '/fancy-chat/threads/t_1/messages', textMessage('email the team'), 'human:u_1')['body']['messageId'];
+    $parked = chat()->snapshot('t_1');
+    $oldTurn = collect($parked['turns'])->firstWhere('state', 'awaiting-human')['turnId'];
+    expect($oldTurn)->toBeString();
+
+    $r = http('POST', '/fancy-chat/threads/t_1/messages', textMessage('email only me') + ['supersedes' => $first], 'human:u_1');
+    expect($r['status'])->toBe(201)->and($r['body']['delivery'])->toBe('sent');
+
+    $state = chat()->snapshot('t_1');
+    $old = collect($state['turns'])->firstWhere('turnId', $oldTurn);
+    expect($old['state'])->toBe('settled')
+        ->and($old['outcome'])->toBe('cancelled')
+        ->and($state['illegal'])->toBe(0)
+        ->and(collect($state['messages'])->firstWhere('id', $r['body']['messageId'])['delivery'])->not->toBe('queued')
+        ->and(count($state['turns']))->toBe(2);
+});
+
+it('truncate settles a parked turn even when the backend cannot cancel: nothing of it is running', function (): void {
+    chatApp(['fancy-chat.edit_resend.policy' => 'truncate']);
+    $inputs = [];
+    bindHost()->backend(approvalBackend($inputs, 'send-email', ['steering' => false, 'cancel' => false, 'approvals' => true]))->stagedWrite('send-email', new CountingWrite);
+    $first = http('POST', '/fancy-chat/threads/t_1/messages', textMessage('email the team'), 'human:u_1')['body']['messageId'];
+    $oldTurn = collect(chat()->snapshot('t_1')['turns'])->firstWhere('state', 'awaiting-human')['turnId'];
+
+    $r = http('POST', '/fancy-chat/threads/t_1/messages', textMessage('email only me') + ['supersedes' => $first], 'human:u_1');
+    expect($r['body']['delivery'])->toBe('sent');
+    $old = collect(chat()->snapshot('t_1')['turns'])->firstWhere('turnId', $oldTurn);
+    expect($old['state'])->toBe('settled')->and($old['outcome'])->toBe('cancelled');
+});
+
+it('branch policy leaves the parked turn alone', function (): void {
+    chatApp();
+    $inputs = [];
+    bindHost()->backend(approvalBackend($inputs))->stagedWrite('send-email', new CountingWrite);
+    $first = http('POST', '/fancy-chat/threads/t_1/messages', textMessage('email the team'), 'human:u_1')['body']['messageId'];
+    $r = http('POST', '/fancy-chat/threads/t_1/messages', textMessage('email only me') + ['supersedes' => $first], 'human:u_1');
+    expect($r['body']['delivery'])->toBe('queued');
+    expect(collect(chat()->snapshot('t_1')['turns'])->where('state', 'awaiting-human')->count())->toBe(1);
 });
 
 it('truncate between turns retracts the superseded reply and starts the new turn', function (): void {

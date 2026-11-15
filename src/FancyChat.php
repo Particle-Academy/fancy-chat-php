@@ -464,24 +464,34 @@ final class FancyChat
             $message['supersedes'] = $supersedes;
         }
 
+        if ($supersedes !== null && $policy === 'truncate') {
+            // Truncate first: it cancels the turns the removed branch left parked,
+            // so the new message starts rather than queueing behind a dead turn.
+            $created = $this->append($threadId, ['type' => 'message.created', 'actor' => $actor, 'data' => ['message' => $message]]);
+            $this->truncateBranch($threadId, $messageId);
+            $state = $this->snapshot($threadId);
+            if ($this->activeTurn($state) !== null) {
+                $this->append($threadId, ['type' => 'delivery.changed', 'data' => ['messageId' => $messageId, 'action' => 'queue']]);
+
+                return ['messageId' => $messageId, 'seq' => $created['seq'], 'delivery' => 'queued'];
+            }
+            $this->startTurn($threadId, $messageId, $parts);
+
+            return ['messageId' => $messageId, 'seq' => $created['seq'], 'delivery' => 'sent'];
+        }
+
         if ($this->activeTurn($state) !== null) {
             $queued = count(array_filter($state['messages'], fn (array $m): bool => $m['delivery'] === 'queued'));
             if ($queued >= (int) $this->cfg('limits.queue_length', 20)) {
                 throw new ChatException('queue.full', 429);
             }
             $created = $this->append($threadId, ['type' => 'message.created', 'actor' => $actor, 'data' => ['message' => $message]]);
-            if ($supersedes !== null && $policy === 'truncate') {
-                $this->truncateBranch($threadId, $messageId);
-            }
             $this->append($threadId, ['type' => 'delivery.changed', 'data' => ['messageId' => $messageId, 'action' => 'queue']]);
 
             return ['messageId' => $messageId, 'seq' => $created['seq'], 'delivery' => 'queued'];
         }
 
         $created = $this->append($threadId, ['type' => 'message.created', 'actor' => $actor, 'data' => ['message' => $message]]);
-        if ($supersedes !== null && $policy === 'truncate') {
-            $this->truncateBranch($threadId, $messageId);
-        }
         $this->startTurn($threadId, $messageId, $parts);
 
         return ['messageId' => $messageId, 'seq' => $created['seq'], 'delivery' => 'sent'];
@@ -507,9 +517,11 @@ final class FancyChat
     {
         $state = $this->snapshot($threadId);
         $rowIds = [];
+        $supersededId = null;
         foreach ($state['branches'] as $branch) {
             if ($branch['byId'] === $byId) {
                 $rowIds = $branch['rowIds'];
+                $supersededId = $branch['supersededId'];
             }
         }
         foreach ($state['messages'] as $m) {
@@ -520,6 +532,36 @@ final class FancyChat
         foreach ($state['approvals'] as $a) {
             if (in_array($a['approvalId'], $rowIds, true) && $a['state'] === 'pending' && $this->store->claim($a['approvalId'], 'pending', 'withdrawn')) {
                 $this->append($threadId, ['type' => 'approval.withdrawn', 'turnId' => $a['turnId'] ?? null, 'data' => ['approvalId' => $a['approvalId']]]);
+            }
+        }
+        if ($supersededId !== null) {
+            $this->cancelBranchTurns($threadId, $supersededId);
+        }
+    }
+
+    /**
+     * Cancels every unsettled turn a truncated branch referenced
+     * (`Projection::turnsToCancelForBranch`). A parked turn has nothing
+     * running, so it is settled here; a running one is cancelled through the
+     * backend, and settled only on an `ok`.
+     */
+    private function cancelBranchTurns(string $threadId, string $supersededId): void
+    {
+        $state = $this->snapshot($threadId);
+        foreach (Projection::turnsToCancelForBranch($state, $supersededId) as $turnId) {
+            $turn = $this->findRecord($state, 'turns', 'turnId', $turnId);
+            if ($turn === null) {
+                continue;
+            }
+            if ($turn['state'] !== 'cancelling') {
+                $this->append($threadId, ['type' => 'turn.transition', 'turnId' => $turnId, 'data' => ['turnId' => $turnId, 'action' => 'cancel']]);
+            }
+            $settle = $turn['state'] === 'awaiting-human';
+            if (! $settle && $this->backend !== null && ($this->backend->capabilities()['cancel'] ?? false) === true) {
+                $settle = $this->backend->cancel($threadId, $turnId, 'stop', (int) $this->cfg('cancel.confirm_wait_ms', 2000)) === CancelOutcome::OK;
+            }
+            if ($settle) {
+                $this->append($threadId, ['type' => 'turn.settled', 'turnId' => $turnId, 'data' => ['turnId' => $turnId, 'action' => 'cancelled']]);
             }
         }
     }
@@ -561,6 +603,8 @@ final class FancyChat
 
             throw $e;
         }
+        // Taken as the decision: `decided` is final, so the text can never reach the agent later.
+        $this->append($threadId, ['type' => 'delivery.changed', 'data' => ['messageId' => $messageId, 'action' => 'decide']]);
         $this->append($threadId, ['type' => 'x-fancy-chat.typed-decision', 'actor' => $actor, 'data' => [
             'messageId' => $messageId, 'approvalId' => $approval['approvalId'], 'optionId' => $match['optionId'], 'decision' => $match['decision'],
         ]]);
@@ -568,7 +612,7 @@ final class FancyChat
         return [
             'messageId' => $messageId,
             'seq' => $created['seq'],
-            'delivery' => 'sent',
+            'delivery' => 'decided',
             'typedDecision' => ['approvalId' => $approval['approvalId'], 'optionId' => $match['optionId'], 'decision' => $match['decision'], 'state' => $decided['approval']['state']],
         ];
     }

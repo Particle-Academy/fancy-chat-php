@@ -37,7 +37,7 @@ it('runs every section that names the php leg', function (): void {
         }
     }
     sort($php);
-    expect($php)->toBe(['actionable', 'approval', 'decide', 'delivery', 'envelope', 'optionTone', 'parts', 'planStep', 'projection', 'question', 'reservedTools', 'status', 'turn', 'typedApproval', 'undo']);
+    expect($php)->toBe(['actionable', 'approval', 'branchTurns', 'decide', 'delivery', 'envelope', 'optionTone', 'parts', 'planStep', 'projection', 'question', 'reservedTools', 'status', 'turn', 'typedApproval', 'undo']);
 });
 
 it('validates the envelope', function (array $c): void {
@@ -139,6 +139,13 @@ it('releases a held plan step only through its approval', function (array $c): v
     $r = Plan::check($c['prev'], $c['next'], Fixtures::section('planStep')['approvals']);
     expect(['ok' => $r['ok'], 'error' => $r['ok'] ? null : $r['error']])->toBe(['ok' => $c['ok'], 'error' => $c['error']]);
 })->with(Fixtures::cases('planStep', fn (array $c): string => $c['name']));
+
+it('names the turns a truncated branch must cancel', function (array $c): void {
+    $defaults = Fixtures::section('projection')['defaults'];
+    $events = array_map(fn (array $e): array => array_merge($defaults, $e), Fixtures::section('branchTurns')['events']);
+    $state = Projection::project($events)['state'];
+    expect(Projection::turnsToCancelForBranch($state, $c['supersededId']))->toBe($c['expect']);
+})->with(Fixtures::cases('branchTurns', fn (array $c): string => $c['name']));
 
 it('keeps typed approval off, with no phrases, until the host turns it on', function (): void {
     $approval = ['state' => 'pending', 'options' => [['id' => 'o', 'kind' => 'allow-once', 'label' => 'Go']]];

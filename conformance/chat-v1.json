@@ -59,7 +59,13 @@
       { "from": "sent", "action": "unsend", "ok": false, "to": null },
       { "from": "delivered", "action": "unsend", "ok": false, "to": null },
       { "from": "unsent", "action": "deliver", "ok": false, "to": null },
-      { "from": "failed", "action": "ack", "ok": false, "to": null }
+      { "from": "failed", "action": "ack", "ok": false, "to": null },
+      { "from": "sent", "action": "decide", "ok": true, "to": "decided" },
+      { "from": "queued", "action": "decide", "ok": true, "to": "decided" },
+      { "from": "decided", "action": "deliver", "ok": false, "to": null },
+      { "from": "decided", "action": "unsend", "ok": false, "to": null },
+      { "from": "delivered", "action": "decide", "ok": false, "to": null },
+      { "from": "sending", "action": "decide", "ok": false, "to": null }
     ]
   },
   "approval": {
@@ -394,6 +400,20 @@
         }
       },
       {
+        "name": "a message taken as a typed decision is marked decided, never delivered",
+        "events": [
+          { "seq": 1, "type": "message.created", "actor": { "kind": "human", "id": "u_1" }, "data": { "message": { "id": "m_1", "role": "user", "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "approve" }], "delivery": "sent" } } },
+          { "seq": 2, "type": "delivery.changed", "actor": { "kind": "system", "id": "server" }, "data": { "messageId": "m_1", "action": "decide" } },
+          { "seq": 3, "type": "delivery.changed", "actor": { "kind": "system", "id": "server" }, "data": { "messageId": "m_1", "action": "deliver" } }
+        ],
+        "expect": {
+          "lastSeq": 3, "illegal": 1, "turns": [], "approvals": [], "questions": [],
+          "rows": [
+            { "kind": "message", "id": "m_1", "role": "user", "author": { "kind": "human", "id": "u_1" }, "turnId": null, "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "approve" }], "open": [], "delivery": "decided", "supersedes": null, "retracted": false, "superseded": false }
+          ]
+        }
+      },
+      {
         "name": "a held plan step releases only through its approval",
         "events": [
           { "seq": 1, "type": "plan.updated", "runId": "r_1", "data": { "steps": [{ "id": "s1", "title": "Pay", "status": "held", "owner": "human", "approvalId": "ap_1" }] } },
@@ -463,6 +483,34 @@
       { "name": "dropping a held step releases nothing", "prev": [{ "id": "s", "title": "Pay", "status": "held", "owner": "human", "approvalId": "ap_wait" }], "next": [], "ok": false, "error": "plan.held" },
       { "name": "a step may become held, and staying held is fine", "prev": [{ "id": "s", "title": "Pay", "status": "pending", "owner": "agent" }], "next": [{ "id": "s", "title": "Pay", "status": "held", "owner": "human", "approvalId": "ap_wait" }], "ok": true, "error": null },
       { "name": "an unknown status is refused", "prev": [], "next": [{ "id": "s", "title": "Pay", "status": "paused", "owner": "agent" }], "ok": false, "error": "plan.step" }
+    ]
+  },
+  "branchTurns": {
+    "legs": ["js", "php"],
+    "about": "Under the truncate policy the server cancels every UNSETTLED turn the removed branch references: through a message in the branch (the superseded message included) or an approval placed in it. Settled turns and turns outside the branch are left alone.",
+    "events": [
+      { "seq": 1, "type": "message.created", "actor": { "kind": "human", "id": "u_1" }, "data": { "turnId": "u_first", "message": { "id": "m_1", "role": "user", "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "one" }], "delivery": "sent" } } },
+      { "seq": 2, "type": "turn.started", "actor": { "kind": "system", "id": "server" }, "data": { "turnId": "u_old" } },
+      { "seq": 3, "type": "turn.transition", "actor": { "kind": "system", "id": "server" }, "data": { "turnId": "u_old", "action": "start" } },
+      { "seq": 4, "type": "message.created", "actor": { "kind": "agent", "id": "compass" }, "data": { "turnId": "u_old", "message": { "id": "m_2", "role": "assistant", "parts": [] } } },
+      { "seq": 5, "type": "approval.requested", "actor": { "kind": "system", "id": "server" }, "data": { "approval": { "approvalId": "ap_1", "turnId": "u_side", "title": "Send?", "summary": "", "preview": [], "options": [{ "id": "o1", "kind": "allow-once", "label": "Send" }], "state": "pending" } } },
+      { "seq": 6, "type": "turn.started", "actor": { "kind": "system", "id": "server" }, "data": { "turnId": "u_side" } },
+      { "seq": 7, "type": "turn.transition", "actor": { "kind": "system", "id": "server" }, "data": { "turnId": "u_side", "action": "start" } },
+      { "seq": 8, "type": "turn.transition", "actor": { "kind": "system", "id": "server" }, "data": { "turnId": "u_side", "action": "park" } },
+      { "seq": 9, "type": "turn.transition", "actor": { "kind": "system", "id": "server" }, "data": { "turnId": "u_old", "action": "park" } },
+      { "seq": 10, "type": "message.created", "actor": { "kind": "agent", "id": "compass" }, "data": { "turnId": "u_done", "message": { "id": "m_3", "role": "assistant", "parts": [] } } },
+      { "seq": 11, "type": "turn.started", "actor": { "kind": "system", "id": "server" }, "data": { "turnId": "u_done" } },
+      { "seq": 12, "type": "turn.transition", "actor": { "kind": "system", "id": "server" }, "data": { "turnId": "u_done", "action": "start" } },
+      { "seq": 13, "type": "turn.settled", "actor": { "kind": "system", "id": "server" }, "data": { "turnId": "u_done", "action": "finish" } },
+      { "seq": 14, "type": "turn.started", "actor": { "kind": "system", "id": "server" }, "data": { "turnId": "u_outside" } },
+      { "seq": 15, "type": "turn.started", "actor": { "kind": "system", "id": "server" }, "data": { "turnId": "u_first" } },
+      { "seq": 16, "type": "turn.transition", "actor": { "kind": "system", "id": "server" }, "data": { "turnId": "u_first", "action": "start" } },
+      { "seq": 17, "type": "turn.transition", "actor": { "kind": "system", "id": "server" }, "data": { "turnId": "u_first", "action": "park" } },
+      { "seq": 18, "type": "message.created", "actor": { "kind": "human", "id": "u_1" }, "data": { "message": { "id": "m_4", "role": "user", "parts": [{ "id": "p", "kind": "text", "format": "plain", "text": "one, edited" }], "delivery": "sent", "supersedes": "m_1" } } }
+    ],
+    "cases": [
+      { "name": "parked turns in the branch, through a message (the superseded one included) or an approval; never a settled one or one outside", "supersededId": "m_1", "expect": ["u_old", "u_side", "u_first"] },
+      { "name": "a message with no branch cancels nothing", "supersededId": "m_404", "expect": [] }
     ]
   },
   "sequence": {
