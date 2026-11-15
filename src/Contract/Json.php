@@ -16,7 +16,7 @@ final class Json
     /** Fields whose value is a JSON object on the wire, even when empty. */
     private const array MAP_KEYS = [
         'data', 'args', 'values', 'notes', 'snapshot', 'actor', 'author', 'decidedBy', 'answeredBy',
-        'echarts', 'spec', 'meta', 'message', 'part', 'approval', 'question', 'progress', 'limit', 'x',
+        'echarts', 'spec', 'meta', 'message', 'part', 'approval', 'question', 'progress', 'limit', 'x', 'capabilities',
     ];
 
     /** Fields whose value is a list of JSON objects on the wire. */

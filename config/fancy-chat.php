@@ -106,5 +106,8 @@ return [
     'queue' => [
         'connection' => null,
         'name' => null,
+        /* RunTurn: seconds one turn may take, and attempts (a retried turn may re-run tools). */
+        'timeout' => 600,
+        'tries' => 1,
     ],
 ];

@@ -90,8 +90,13 @@ final class ChatController
             $at = $request->query('at');
             $state = $this->chat->snapshot($thread, is_numeric($at) ? (int) $at : null);
 
-            return $this->json(200, ['snapshot' => $state, 'seq' => $state['lastSeq']]);
+            return $this->json(200, ['snapshot' => $state, 'seq' => $state['lastSeq'], 'capabilities' => $this->chat->backendCapabilities()]);
         });
+    }
+
+    public function capabilities(Request $request, string $thread): Response
+    {
+        return $this->guard(fn (): Response => $this->json(200, ['capabilities' => $this->chat->capabilities($request, $thread)]));
     }
 
     public function cancel(Request $request, string $thread): Response

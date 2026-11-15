@@ -23,13 +23,21 @@ composer require particle-academy/fancy-chat-php
 php artisan migrate
 ```
 
+Until the first Packagist release, require it from git: add
+`{"type": "vcs", "url": "https://github.com/Particle-Academy/fancy-chat-php.git"}` to
+`repositories` and require `particle-academy/fancy-chat-php:dev-main` (or
+`dev-main#<sha>` to pin a commit).
+
 Laravel 13, PHP 8.4.
 
 ## Bind the host
 
 Nothing works until the host binds an actor resolver and an access resolver:
 every route answers `403 chat.unconfigured` until then. No user model is
-assumed; an actor is `{kind, id}` from your own resolver.
+assumed; an actor is `{kind, id, label?}` from your own resolver. `label` (a
+display name, a non-empty string) is kept on the events the actor writes and on
+the messages they author; it is shown, never compared: decisions match `kind` and
+`id` alone.
 
 ```php
 use FancyChat\Facades\FancyChat;
@@ -49,10 +57,11 @@ Mounted under `fancy-chat` (configurable, or off with `fancy-chat.routes`):
 
 | Route | Purpose |
 |---|---|
-| `POST threads/{id}/messages` | A human sends `{parts, supersedes?}`. Returns `{messageId, seq, delivery}`. Mid-turn it queues. With typed approval on and a match, it returns `typedDecision` too (see below). |
+| `POST threads/{id}/messages` | A human sends `{parts, supersedes?}`. Answers **201** `{messageId, seq, delivery}` (`sent`; `queued` mid-turn; `decided` when typed approval took it, with `typedDecision`, see below). |
 | `GET threads/{id}/events` | SSE. Resumes from `Last-Event-ID` or `?after`, replays, then streams live with heartbeat comments until `sse.max_duration_ms`. |
 | `GET threads/{id}/events/poll?after=&wait=` | Long-poll: `{events, next}`. |
-| `GET threads/{id}/snapshot?at=` | The projected thread at a seq. |
+| `GET threads/{id}/snapshot?at=` | 200 `{snapshot, seq, capabilities}`: `snapshot` is the projected state (fancy-chat-js `ThreadState`: `lastSeq`, `order`, `messages`, `turns`, `thinking`, `tools`, `plans`, `approvals`, `questions`, `undos`, `branches`) at `at` (default: now); `seq` is its `lastSeq`; `capabilities` as below. `410 snapshot.gone` before the retained window, `422 snapshot.at` past the end. |
+| `GET threads/{id}/capabilities` | 200 `{capabilities: {steering, cancel, approvals}}`, the backend's, as booleans (all false without one). A UI hides Stop when `cancel` is false. |
 | `POST threads/{id}/cancel` | `{mode: stop or interrupt}`. Returns `{outcome}`: `ok`, `not-running`, `no-turn`, `unsupported`, `refused`, `uncertain`. A stop withdraws the turn's parked approvals. |
 | `DELETE threads/{id}/queue/{messageId}` | The author unsends a queued message. |
 | `POST approvals/{id}/decision` | `{optionId, note?, edited?}`. Human actors only. |
@@ -129,8 +138,21 @@ Implement `FancyChat\Backend\AgentBackend` (`start`, `cancel`,
 seq and thread and checks each against the contract. `NullBackend` is a
 scripted backend for tests and demos.
 
-Turns run in the queued `RunTurn` job. Schedule `php artisan fancy-chat:reap`
-to settle stalled turns.
+`start(TurnInput)` gets `kind` `message`, or `resume` after a human acted. A resume
+carries `approval` / `question` (the record that triggered it) and `approvals` /
+`questions`: EVERY approval of that turn a human decided and every question answered,
+in the order raised, so a backend parked on several sees all of them.
+
+The host may also append events itself (`FancyChat::append`). An
+`approval.requested` or `question.asked` goes through the same checks as a backend's
+(record shape, option kinds, preview parts) and is stamped with its turn (the
+event's `turnId`, else the thread's active turn). An id already used in ANY thread is
+refused (`409 approval.duplicate`), because decisions are routed by id.
+
+Turns run in the queued `RunTurn` job, with `$timeout` and `$tries` from
+`queue.timeout` (600 s) and `queue.tries` (1: a turn that failed part way may already
+have run tools, so it is not retried unless you opt in). Schedule
+`php artisan fancy-chat:reap` to settle stalled turns.
 
 ## The optional nudge
 
@@ -146,7 +168,8 @@ Every limit lives in `config/fancy-chat.php`: `retention.events`,
 `limits.{event_bytes,part_bytes,part_depth,parts_per_message,queue_length}`,
 `reaper.{timeout_ms,include_parked}`, `cancel.confirm_wait_ms`, `hitl.scope`,
 `typed_approval.{enabled,locale,phrases}`, `undo.{default_ms,max_ms,batch}`,
-`edit_resend.policy`, `nudge.*` and `queue.*`.
+`edit_resend.policy`, `nudge.*` and `queue.{connection,name,timeout,tries}`,
+`limits.tool_output_chars`.
 
 ## Develop
 

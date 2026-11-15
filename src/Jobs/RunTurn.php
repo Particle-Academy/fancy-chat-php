@@ -21,8 +21,21 @@ final class RunTurn implements ShouldQueue
     use Dispatchable;
     use Queueable;
 
+    /** Seconds a worker may spend on one turn (`fancy-chat.queue.timeout`, default 600). */
+    public int $timeout;
+
+    /**
+     * Attempts (`fancy-chat.queue.tries`, default 1). A turn that fails part way may
+     * already have run tools, so it is not retried unless the host opts in.
+     */
+    public int $tries;
+
     /** @param  array<string, mixed>  $input  a TurnInput as an array */
-    public function __construct(public array $input) {}
+    public function __construct(public array $input)
+    {
+        $this->timeout = max(1, (int) config('fancy-chat.queue.timeout', 600));
+        $this->tries = max(1, (int) config('fancy-chat.queue.tries', 1));
+    }
 
     public function handle(FancyChat $chat): void
     {

@@ -36,6 +36,9 @@ use Throwable;
  */
 final class FancyChat
 {
+    /** Approval states a human decision leads to (machines.json): what a resume carries. */
+    private const array DECIDED_APPROVAL = ['approved', 'rejected', 'edited', 'applied', 'apply-failed'];
+
     private const string THREAD_ID = '/^[A-Za-z0-9._:-]{1,128}$/';
 
     /** Event types a backend may never emit: they are the server's or the human's. */
@@ -169,7 +172,40 @@ final class FancyChat
      */
     public function append(string $threadId, array $partial): array
     {
+        return $this->appendAs($threadId, $partial, 'server');
+    }
+
+    /**
+     * Every append goes through here, the host's own and a backend's alike, so an
+     * approval or question record is checked (shape, option kinds, preview parts,
+     * an id unused in ANY thread) and stamped with its turn on every path.
+     *
+     * @param  array<string, mixed>  $partial
+     * @param  'server'|'agent'  $origin  whose parts an approval preview is
+     * @return array<string, mixed>
+     */
+    private function appendAs(string $threadId, array $partial, string $origin): array
+    {
         $this->assertThreadId($threadId);
+        $hitlType = $partial['type'] ?? null;
+        if ($hitlType === 'approval.requested' || $hitlType === 'question.asked') {
+            $data = Json::isObject($partial['data'] ?? null) ? ($partial['data'] ?? []) : [];
+            $turnId = is_string($partial['turnId'] ?? null) ? $partial['turnId'] : ($this->activeTurn($this->snapshot($threadId))['turnId'] ?? null);
+            if ($hitlType === 'approval.requested') {
+                [$record, $error] = $this->approvalRecord($data['approval'] ?? null, $turnId, $partial['runId'] ?? null, $origin);
+                $data['approval'] = $record;
+            } else {
+                [$record, $error] = $this->questionRecord($data['question'] ?? null, $turnId);
+                $data['question'] = $record;
+            }
+            if ($error !== null) {
+                throw new ChatException($error, str_ends_with($error, '.duplicate') ? 409 : 422);
+            }
+            $partial['data'] = $data;
+            if ($turnId !== null) {
+                $partial['turnId'] = $turnId;
+            }
+        }
         $event = [
             'v' => 1,
             'seq' => 1,
@@ -381,7 +417,39 @@ final class FancyChat
             throw new ChatException('chat.actor', 401);
         }
 
-        return ['kind' => $actor['kind'], 'id' => $actor['id']];
+        $out = ['kind' => $actor['kind'], 'id' => $actor['id']];
+        // A display name the host resolved (never from the request body). It is shown,
+        // never compared: decisions match on kind and id alone.
+        if (is_string($actor['label'] ?? null) && $actor['label'] !== '') {
+            $out['label'] = $actor['label'];
+        }
+
+        return $out;
+    }
+
+    /**
+     * What the bound backend can do, as booleans; all false without a backend.
+     *
+     * @return array{steering: bool, cancel: bool, approvals: bool}
+     */
+    public function backendCapabilities(): array
+    {
+        $c = $this->backend?->capabilities() ?? [];
+
+        return [
+            'steering' => ($c['steering'] ?? null) === true,
+            'cancel' => ($c['cancel'] ?? null) === true,
+            'approvals' => ($c['approvals'] ?? null) === true,
+        ];
+    }
+
+    /** @return array{steering: bool, cancel: bool, approvals: bool} */
+    public function capabilities(Request $request, string $threadId): array
+    {
+        $this->resolveActor($request);
+        $this->authorize($request, $threadId, 'read');
+
+        return $this->backendCapabilities();
     }
 
     public function authorize(Request $request, string $threadId, string $ability): void
@@ -902,14 +970,7 @@ final class FancyChat
                     }
                 }
                 break;
-            case 'approval.requested':
-                [$record, $error] = $this->approvalRecord($data['approval'] ?? null, $turnId, $raw['runId'] ?? null);
-                $data['approval'] = $record;
-                break;
-            case 'question.asked':
-                [$record, $error] = $this->questionRecord($data['question'] ?? null, $turnId);
-                $data['question'] = $record;
-                break;
+            // approval.requested and question.asked: checked in appendAs, on every path.
         }
         if ($error !== null) {
             $refuse($error, $type);
@@ -924,7 +985,7 @@ final class FancyChat
             }
         }
         try {
-            $this->append($threadId, $event);
+            $this->appendAs($threadId, $event, 'agent');
         } catch (ChatException $e) {
             $refuse($e->error, $type);
 
@@ -936,7 +997,7 @@ final class FancyChat
     }
 
     /** @return array{0: ?array<string, mixed>, 1: ?string} */
-    private function approvalRecord(mixed $a, string $turnId, mixed $runId): array
+    private function approvalRecord(mixed $a, ?string $turnId, mixed $runId, string $origin): array
     {
         if (! Json::isObject($a) || ! is_string($a['approvalId'] ?? null) || $a['approvalId'] === '' || ! is_string($a['title'] ?? null) || ! Json::isList($a['options'] ?? null) || $a['options'] === []) {
             return [null, 'approval.record'];
@@ -955,7 +1016,7 @@ final class FancyChat
             $v = Parts::validateList($preview, 'server', $this->partLimits());
         } else {
             $preview = $a['preview'] ?? [];
-            $v = Parts::validateList($preview, 'agent', $this->partLimits());
+            $v = Parts::validateList($preview, $origin, $this->partLimits());
         }
         if (! $v['ok']) {
             return [null, $v['error']];
@@ -971,7 +1032,7 @@ final class FancyChat
     }
 
     /** @return array{0: ?array<string, mixed>, 1: ?string} */
-    private function questionRecord(mixed $q, string $turnId): array
+    private function questionRecord(mixed $q, ?string $turnId): array
     {
         if (! Json::isObject($q) || ! is_string($q['questionId'] ?? null) || $q['questionId'] === '' || ! is_string($q['prompt'] ?? null) || ! Json::isList($q['fields'] ?? null)) {
             return [null, 'question.record'];
@@ -1173,7 +1234,11 @@ final class FancyChat
             }
         }
         $this->append($threadId, ['type' => 'turn.transition', 'turnId' => $turnId, 'data' => ['turnId' => $turnId, 'action' => 'resume']]);
-        $this->dispatch(new TurnInput($threadId, $turnId, 'resume', null, [], $approval, $question));
+        // Every approval of this turn a human decided, and every question answered, in
+        // the order they were raised: a backend that parked on several needs them all.
+        $approvals = array_values(array_filter($state['approvals'], fn (array $a): bool => ($a['turnId'] ?? null) === $turnId && in_array($a['state'], self::DECIDED_APPROVAL, true)));
+        $questions = array_values(array_filter($state['questions'], fn (array $q): bool => ($q['turnId'] ?? null) === $turnId && $q['state'] === 'answered'));
+        $this->dispatch(new TurnInput($threadId, $turnId, 'resume', null, [], $approval, $question, $approvals, $questions));
     }
 
     /**

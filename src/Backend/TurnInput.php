@@ -15,6 +15,8 @@ final readonly class TurnInput
      * @param  list<array<string, mixed>>  $parts
      * @param  array<string, mixed>|null  $approval
      * @param  array<string, mixed>|null  $question
+     * @param  list<array<string, mixed>>  $approvals  on resume: every approval of the turn a human decided, in order
+     * @param  list<array<string, mixed>>  $questions  on resume: every question of the turn answered, in order
      */
     public function __construct(
         public string $threadId,
@@ -24,6 +26,8 @@ final readonly class TurnInput
         public array $parts = [],
         public ?array $approval = null,
         public ?array $question = null,
+        public array $approvals = [],
+        public array $questions = [],
     ) {}
 
     /** @return array<string, mixed> */
@@ -35,6 +39,6 @@ final readonly class TurnInput
     /** @param  array<string, mixed>  $a */
     public static function fromArray(array $a): self
     {
-        return new self($a['threadId'], $a['turnId'], $a['kind'] ?? 'message', $a['messageId'] ?? null, $a['parts'] ?? [], $a['approval'] ?? null, $a['question'] ?? null);
+        return new self($a['threadId'], $a['turnId'], $a['kind'] ?? 'message', $a['messageId'] ?? null, $a['parts'] ?? [], $a['approval'] ?? null, $a['question'] ?? null, $a['approvals'] ?? [], $a['questions'] ?? []);
     }
 }

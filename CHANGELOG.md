@@ -10,6 +10,28 @@ version number is not a stability promise until 1.0; read the entry.
 
 ### Added
 
+- **`GET threads/{id}/capabilities`** answers `{capabilities: {steering, cancel,
+  approvals}}`, and the snapshot response carries `capabilities` too, so a UI can show
+  a running turn with no Stop when the backend cannot cancel. Booleans only: anything
+  but `true` reads as false.
+- **A resume carries every decided approval of the turn.** `TurnInput` gains
+  `approvals` and `questions` (all of the turn's decided approvals and answered
+  questions, in order); `approval` / `question` stay the one that triggered it.
+  Nothing to do unless your backend parks on several approvals at once.
+- **`RunTurn` has `$timeout` and `$tries`**, from `queue.timeout` (600) and
+  `queue.tries` (1).
+- **The actor's `label`** from the host resolver is kept (it was dropped).
+- README: the 201 from send, the `{snapshot, seq, capabilities}` snapshot body.
+
+### Fixed
+
+- **The host's own `append` skipped the approval checks.** An `approval.requested`
+  or `question.asked` appended by the host is now checked like a backend's and
+  stamped with its turn. **An approval or question id already used in another
+  thread is refused** (`409 approval.duplicate`): before, the HITL index was
+  overwritten and a decision could be routed to the wrong thread. If you appended
+  records that reuse ids across threads, give them unique ids.
+
 - **Several thinking blocks per run, in order** (fancy-chat-js 6fbfe4c). A run that
   thinks, calls a tool and thinks again projects two thinking rows, each with a
   `thinkingId` (the event's `data.thinkingId`, else the run id, then `<runId>#2`...).
