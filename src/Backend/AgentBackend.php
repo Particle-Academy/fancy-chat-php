@@ -5,12 +5,11 @@ declare(strict_types=1);
 namespace FancyChat\Backend;
 
 /**
- * Any agent backend, or none: the chat server is provider-neutral. A backend
- * yields neutral events (no seq, no thread id; the server assigns both) and
- * the server enforces the contract on every one of them.
- *
- * Prism Harness, ACP and plain Prism `asStream()` adapters live in the
- * optional particle-academy/fancy-chat-prism-php package.
+ * The seam between the chat server and the agent. The backend is Prism Harness:
+ * FancyChat\Prism\HarnessBackend. This interface exists so a host can wrap it
+ * (routing some threads elsewhere) and so the suite can script a turn; nothing
+ * is bound by default. A backend yields contract events (no seq, no thread id;
+ * the server assigns both) and the server enforces the contract on every one.
  */
 interface AgentBackend
 {

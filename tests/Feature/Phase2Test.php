@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use FancyChat\Backend\NullBackend;
+use FancyChat\Tests\Support\ScriptedBackend;
 use FancyChat\Backend\TurnInput;
 use FancyChat\ChatException;
 use FancyChat\Contract\TypedApproval;
@@ -380,7 +380,7 @@ it('refuses an edit-and-resend policy outside the set', function (): void {
 
 it('refuses a backend releasing a held step before its approval, before appending it', function (): void {
     chatApp();
-    bindHost()->backend(new NullBackend(function (TurnInput $input): iterable {
+    bindHost()->backend(new ScriptedBackend(function (TurnInput $input): iterable {
         yield ['type' => 'plan.updated', 'runId' => 'r_1', 'data' => ['steps' => [['id' => 's1', 'title' => 'Pay', 'status' => 'held', 'owner' => 'human', 'approvalId' => 'ap_x']]]];
         yield ['type' => 'plan.updated', 'runId' => 'r_1', 'data' => ['steps' => [['id' => 's1', 'title' => 'Pay', 'status' => 'done', 'owner' => 'human', 'approvalId' => 'ap_x']]]];
     }));

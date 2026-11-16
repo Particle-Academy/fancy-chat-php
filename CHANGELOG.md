@@ -8,8 +8,42 @@ version number is not a stability promise until 1.0; read the entry.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-16
+
+**Read this first: fancy-chat-php is now built on Prism, and it absorbs
+`particle-academy/fancy-chat-prism-php`.** The CC-fancy-0042 ruling was misread as
+"no Prism in the core"; it meant the extras (prism-graph, prism-memory, the browser)
+are optional (owner, 2026-11-16). If you used fancy-chat-prism-php, run
+`composer remove particle-academy/fancy-chat-prism-php`: the class names are the same,
+so no code changes (and `replace` removes it anyway).
+
+### Added
+
+- **Prism Harness is the backend, in this package.** `FancyChat\Prism\HarnessBackend`
+  (the RunStep `g282.1` mapping, streamed approvals through `streamDecision`, cancel),
+  `FancyChat\Prism\KnowledgeBridge` and `UnsupportedKnowledgeCall`, folded in from
+  fancy-chat-prism-php 0.1.0 with their suite and sabotage list
+  (`tests/sabotage-prism.php`, also in CI).
+- **Attachments.** `HarnessBackend(attachments: fn (array $part, TurnInput $turn, ?array $author): Media|string|null)`:
+  the host resolves each `image` / `file` part of a new message, with the author the
+  server recorded. Prism media goes to Harness as `additionalContent` (checked by
+  Harness's `TurnAttachments::admit` first), a string is a pointer for the model,
+  `null` withholds it (`x-fancy-chat-prism.attachment-withheld`, named by label, never
+  ref). Every attachment gets a prompt line, so an image-only message has a prompt.
+  Without a resolver: metadata pointers only, nothing read.
+- **`sourceTitle` on every chunk the KnowledgeBridge serves (CC-fancy-0044)**, from one
+  scoped `ScopedGraph::getSource()` per distinct source (prism-graph 0.4). Absent, never
+  guessed, when the scope cannot see the source or the store has no source lookup.
+- **`KnowledgeBridge::available()`**, and `routes()` throws a `LogicException` naming
+  `composer require particle-academy/prism-graph` when prism-graph is missing.
+
 ### Changed
 
+- **BREAKING: requires `particle-academy/prism-harness >=0.26 <2.0` and
+  `particle-academy/prism >=0.143 <2.0`.** Composer installs them; nothing to do.
+- **prism-graph is suggested at `>=0.4`** (was `^0.3` in fancy-chat-prism-php), for
+  `getSource`. Only the KnowledgeBridge needs it.
+- `replace: particle-academy/fancy-chat-prism-php`: the two can never be installed together.
 - **Conformance fixture re-vendored from fancy-chat-js, with three new cases.** A
   `plan.updated` with a null or non-object step is refused (`plan.step`), counted
   illegal, and the cursor moves past it. fancy-chat-js threw on the null step; this
@@ -19,6 +53,14 @@ version number is not a stability promise until 1.0; read the entry.
   totality test feeds every core event type malformed shapes and checks
   `Projection::apply` never throws. It passes on 0.1.0 too, so it is coverage, not
   a fix. Nothing to do.
+
+### Removed
+
+- **BREAKING: `FancyChat\Backend\NullBackend`.** It was the scripted backend for tests
+  and demos, and it now lives in this suite only (`tests/Support/ScriptedBackend`). What
+  to do: bind `HarnessBackend`; in your own tests, implement `AgentBackend` in a few
+  lines (see the lab's `LabQuestionBackend`) or drive Harness with Prism's fake.
+- The no-Prism packaging test and its fixture.
 
 ## [0.1.0] - 2026-11-15
 

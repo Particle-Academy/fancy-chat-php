@@ -2,10 +2,11 @@
 
 declare(strict_types=1);
 
-use FancyChat\Backend\NullBackend;
+use FancyChat\Tests\Support\ScriptedBackend;
 use FancyChat\Backend\TurnInput;
 use FancyChat\FancyChat;
 use FancyChat\StagedWrite;
+use FancyChat\Tests\Harness\Support\TestApp as HarnessTestApp;
 use FancyChat\Tests\Support\TestApp;
 use Illuminate\Container\Container;
 use Illuminate\Foundation\Application;
@@ -16,6 +17,20 @@ uses()->afterEach(function (): void {
     Facade::clearResolvedInstances();
     Container::setInstance(null);
 })->in(__DIR__.'/Feature');
+
+/*
+ * The Prism Harness suite (src/Prism/, folded in from fancy-chat-prism-php in
+ * 0.2.0). Its files and helpers live in the FancyChat\Tests\Harness namespace,
+ * so its helper names never collide with the ones below.
+ */
+uses()->beforeEach(function (): void {
+    HarnessTestApp::boot();
+})->afterEach(function (): void {
+    Facade::clearResolvedInstances();
+    Container::setInstance(null);
+})->in(__DIR__.'/Harness/Feature');
+
+require_once __DIR__.'/Harness/helpers.php';
 
 /**
  * Recursively sorts associative keys so `toBe` compares structure strictly
@@ -119,9 +134,9 @@ function http(string $method, string $uri, ?array $body = null, ?string $who = n
 }
 
 /** A backend that answers every message with one streamed text part. */
-function replyBackend(string $text = 'Acme is won.'): NullBackend
+function replyBackend(string $text = 'Acme is won.'): ScriptedBackend
 {
-    return new NullBackend(function (TurnInput $input) use ($text): iterable {
+    return new ScriptedBackend(function (TurnInput $input) use ($text): iterable {
         yield ['type' => 'thinking.started', 'runId' => 'r_'.$input->turnId];
         yield ['type' => 'thinking.delta', 'runId' => 'r_'.$input->turnId, 'data' => ['text' => 'Look it up.']];
         yield ['type' => 'tool.called', 'runId' => 'r_'.$input->turnId, 'data' => ['toolCallId' => 'tc_'.$input->turnId, 'name' => 'search', 'args' => []]];
@@ -181,9 +196,9 @@ final class CountingWrite implements StagedWrite
  * records every input it was started with.
  */
 /** @param  array{steering: bool, cancel: bool, approvals: bool}  $capabilities */
-function approvalBackend(array &$inputs, string $stagedWrite = 'send-email', array $capabilities = ['steering' => false, 'cancel' => true, 'approvals' => true]): NullBackend
+function approvalBackend(array &$inputs, string $stagedWrite = 'send-email', array $capabilities = ['steering' => false, 'cancel' => true, 'approvals' => true]): ScriptedBackend
 {
-    return new NullBackend(function (TurnInput $input) use (&$inputs, $stagedWrite): iterable {
+    return new ScriptedBackend(function (TurnInput $input) use (&$inputs, $stagedWrite): iterable {
         $inputs[] = $input;
         if ($input->kind === 'resume') {
             yield ['type' => 'message.created', 'data' => ['message' => ['id' => 'done_'.$input->turnId, 'role' => 'assistant', 'parts' => [['id' => 'p', 'kind' => 'text', 'format' => 'plain', 'text' => 'Done.']]]]];

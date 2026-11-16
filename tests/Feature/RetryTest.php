@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use FancyChat\Backend\NullBackend;
+use FancyChat\Tests\Support\ScriptedBackend;
 use FancyChat\Backend\TurnInput;
 
 /*
@@ -12,11 +12,11 @@ use FancyChat\Backend\TurnInput;
  * client state.
  */
 
-function flakyBackend(array &$inputs, int $failFirst = 1): NullBackend
+function flakyBackend(array &$inputs, int $failFirst = 1): ScriptedBackend
 {
     $n = 0;
 
-    return new NullBackend(function (TurnInput $input) use (&$inputs, &$n, $failFirst): iterable {
+    return new ScriptedBackend(function (TurnInput $input) use (&$inputs, &$n, $failFirst): iterable {
         $inputs[] = $input;
         if ($n++ < $failFirst) {
             yield ['type' => 'turn.settled', 'data' => ['action' => 'fail', 'reason' => 'output_limit']];
@@ -59,7 +59,7 @@ it('a retry queues behind a running turn, in order, then runs', function (): voi
     chatApp();
     $inputs = [];
     $hold = true;
-    bindHost()->backend(new NullBackend(function (TurnInput $input) use (&$inputs, &$hold): iterable {
+    bindHost()->backend(new ScriptedBackend(function (TurnInput $input) use (&$inputs, &$hold): iterable {
         $inputs[] = $input;
         $text = $input->parts[0]['text'] ?? '';
         if ($text === 'first') {

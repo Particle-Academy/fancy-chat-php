@@ -30,7 +30,7 @@ declare(strict_types=1);
 
 require dirname(__DIR__, 2).'/vendor/autoload.php';
 
-use FancyChat\Backend\NullBackend;
+use FancyChat\Tests\Support\ScriptedBackend;
 use FancyChat\Backend\TurnInput;
 use FancyChat\Contract\TypedApproval;
 use FancyChat\FancyChat;
@@ -98,7 +98,7 @@ $chat->actor(function (Request $request): ?array {
             return ['ok' => true];
         }
     })
-    ->backend(new NullBackend(function (TurnInput $input): iterable {
+    ->backend(new ScriptedBackend(function (TurnInput $input): iterable {
         $run = 'r_'.$input->turnId;
         if ($input->kind === 'resume') {
             $state = $input->approval['state'] ?? null;

@@ -2,15 +2,20 @@
 
 declare(strict_types=1);
 
-namespace FancyChat\Backend;
+namespace FancyChat\Tests\Support;
+
+use FancyChat\Backend\AgentBackend;
+use FancyChat\Backend\CancelOutcome;
+use FancyChat\Backend\TurnInput;
 
 use Closure;
 
 /**
- * A scripted backend for tests and demos. The script receives the TurnInput
+ * A scripted backend, for this suite and tests/e2e/serve.php ONLY. Not shipped:
+ * a host binds Prism Harness (FancyChat\Prism\HarnessBackend). The script receives the TurnInput
  * and returns (or yields) the turn's events. It records every cancel.
  */
-final class NullBackend implements AgentBackend
+final class ScriptedBackend implements AgentBackend
 {
     /** @var list<array{threadId: string, turnId: string, mode: string, confirmWaitMs: int}> */
     public array $cancels = [];

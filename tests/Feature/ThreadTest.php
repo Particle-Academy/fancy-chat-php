@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use FancyChat\Backend\NullBackend;
+use FancyChat\Tests\Support\ScriptedBackend;
 use FancyChat\Contract\Projection;
 
 it('sends a message, runs the turn and replays it gaplessly', function (string $store): void {
@@ -195,7 +195,7 @@ it('marks an edit-and-resend as superseding, and refuses an unknown target', fun
 
 it('refuses events a backend may not emit, and records the refusal', function (): void {
     chatApp();
-    bindHost()->backend(new NullBackend(function (): iterable {
+    bindHost()->backend(new ScriptedBackend(function (): iterable {
         yield ['type' => 'approval.decided', 'actor' => ['kind' => 'human', 'id' => 'u_1'], 'data' => ['approvalId' => 'x', 'decision' => 'approve', 'decidedBy' => ['kind' => 'human', 'id' => 'u_1']]];
         yield ['type' => 'message.created', 'data' => ['message' => ['id' => 'a', 'role' => 'assistant', 'parts' => [['id' => 'p', 'kind' => 'chart', 'echarts' => []]]]]];
         yield ['type' => 'message.created', 'actor' => ['kind' => 'human', 'id' => 'u_1'], 'data' => ['message' => ['id' => 'b', 'role' => 'user', 'parts' => []]]];
@@ -211,7 +211,7 @@ it('refuses events a backend may not emit, and records the refusal', function ()
 
 it('settles a turn as failed when the backend throws', function (): void {
     chatApp();
-    bindHost()->backend(new NullBackend(function (): iterable {
+    bindHost()->backend(new ScriptedBackend(function (): iterable {
         yield ['type' => 'usage', 'data' => []];
         throw new RuntimeException('provider down with a secret token sk-123');
     }));

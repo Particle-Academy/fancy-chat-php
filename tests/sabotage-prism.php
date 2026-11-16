@@ -1,0 +1,184 @@
+<?php
+
+declare(strict_types=1);
+
+/*
+ * Break one mapping clause at a time; the suite must notice every one. A suite
+ * written alongside its implementation passes on its first run, and a check
+ * never seen to fail cannot be told apart from one that cannot. Each file is
+ * restored in a `finally`. Exits 1 if any mutation survives, 2 if a mutation's
+ * target text is missing (the list has drifted from the code).
+ *
+ *     php tests/sabotage.php
+ */
+
+$root = dirname(__DIR__);
+$file = 'src/Prism/HarnessBackend.php';
+
+/** @var list<array{0: string, 1: string, 2: string, 3: string}> [name, file, search, replace] */
+$mutations = [
+    // The knowledge bridge.
+    ['kb: no scope still served', 'src/Prism/KnowledgeBridge.php', "        if (! \$graph instanceof ScopedGraph) {\n            return new JsonResponse(['error' => 'knowledge.scope'], 403);\n        }\n        try {\n            return new JsonResponse(\$read(\$graph));", "        try {\n            return new JsonResponse(\$read(\$graph));"],
+    ['kb: search not hydrated', 'src/Prism/KnowledgeBridge.php', "        return array_map(fn (Chunk \$c): array => \$found[\$c->id] ?? [", "        return array_map(fn (Chunk \$c): array => ["],
+    ['kb: hydrate stops at the first page', 'src/Prism/KnowledgeBridge.php', "                \$cursor = \$listing['nextCursor'];\n                if (\$cursor === null) {\n                    break;\n                }", '                break;'],
+    ['kb: listing unstamped', 'src/Prism/KnowledgeBridge.php', "        return ['contractVersion' => self::CONTRACT_VERSION, 'items' => array_values(\$items), 'nextCursor' => null];", "        return ['items' => array_values(\$items), 'nextCursor' => null];"],
+    // Not listed, as provably equivalent: 'status' => $f->status (the enum object).
+    // json_encode writes a backed enum as its value, so the wire is identical.
+    ['kb: unaccepted ignored', 'src/Prism/KnowledgeBridge.php', "\$graph->facts(\$subject, unaccepted: \$unaccepted)", "\$graph->facts(\$subject, unaccepted: true)"],
+    ['kb: agents decide', 'src/Prism/KnowledgeBridge.php', "if (! is_array(\$actor) || (\$actor['kind'] ?? null) !== 'human' ||", 'if (! is_array($actor) ||'],
+    ['kb: decisions on by default', 'src/Prism/KnowledgeBridge.php', "            if (\$bridge->decider !== null) {", '            if (true) {'],
+    ['kb: reject accepts', 'src/Prism/KnowledgeBridge.php', "\$decision === 'accept' ? \$graph->accept(\$factId) : \$graph->retract(\$factId);", '$graph->accept($factId);'],
+    ['kb: decision not audited', 'src/Prism/KnowledgeBridge.php', "            (\$this->onDecision)(\$factId, \$decision, \$actor);\n", ''],
+    ['kb: id cap ignored', 'src/Prism/KnowledgeBridge.php', "        if (count(\$ids) > min(\$max, ScopedGraph::MAX_GET_IDS)) {", '        if (false) {'],
+    ['kb: missing subject accepted', 'src/Prism/KnowledgeBridge.php', "        if (! is_string(\$s) || trim(\$s) === '') {\n            throw new InvalidArgumentException('subject');", "        if (! is_string(\$s)) {\n            throw new InvalidArgumentException('subject');"],
+    ['kb: unshipped call guessed', 'src/Prism/KnowledgeBridge.php', "        if (! method_exists(\$graph, \$method)) {\n            throw new UnsupportedKnowledgeCall;\n        }", "        if (! method_exists(\$graph, \$method)) {\n            return ['contractVersion' => self::CONTRACT_VERSION, 'items' => [], 'nextCursor' => null];\n        }"],
+    // A root run that ends badly fails the turn.
+    ['length reads as success', $file, "        'length' => ['action' => 'fail', 'reason' => 'output_limit'],\n", ''],
+    ['content filter reads as success', $file, "        'content-filter' => ['action' => 'fail', 'reason' => 'content_filter'],\n", ''],
+    ['refusal reads as a failure', $file, "'refusal' => ['action' => 'refuse', 'reason' => 'refusal'],", "'refusal' => ['action' => 'fail', 'reason' => 'refusal'],"],
+    ['unknown reasons read as success', $file, ": ['action' => 'fail', 'reason' => 'finish_unknown'];\n    }", ": null;\n    }"],
+    ['root end never settles', $file, "            } elseif (\$end !== null && \$end['settle'] !== null) {", '            } elseif (false) {'],
+    ['a bad finish still parks', $file, "\$st['approvals'] > 0 && (\$end === null || in_array(\$end['finishReason'], ['pause', 'tool-calls'], true))", "\$st['approvals'] > 0"],
+    ['sub-runs settle the turn', $file, "            if (\$event->parentRunId === null && (\$event instanceof RunFinished || \$event instanceof RunFailed)) {", '            if ($event instanceof RunFinished || $event instanceof RunFailed) {'],
+    ['RunFailed ignored', $file, "                    : ['finishReason' => null, 'settle' => self::turnEnd(null, \$event->exception, true)];", "                    : ['finishReason' => null, 'settle' => null];"],
+    ['turnEnd ignores isRoot', $file, "        if (! \$isRoot) {\n            return null;\n        }\n", ''],
+    // The version gate.
+    ['any contract version accepted', $file, 'if ($version !== self::CONTRACT_VERSION) {', 'if (false) {'],
+    ['a missing version accepted', $file, "\$version = is_array(\$step) ? (\$step['contractVersion'] ?? null) : null;", "\$version = is_array(\$step) ? (\$step['contractVersion'] ?? self::CONTRACT_VERSION) : null;"],
+    ['wrong version keeps streaming', $file, "this adapter reads \"'.self::CONTRACT_VERSION.'\"');\n\n                        return;", "this adapter reads \"'.self::CONTRACT_VERSION.'\"');\n\n                        continue;"],
+    ['version reason names no version', $file, "(is_string(\$version) ? '\"'.\$version.'\"' : 'none')", "'a different one'"],
+
+    // Thinking.
+    ['thinking never started', $file, "                yield self::event(\$step, 'thinking.started', []);\n", ''],
+    ['every thinking delta starts a block', $file, "            if (\$st['thinking'] === null) {\n                \$st['thinking'] = \$step;", "            if (true) {\n                \$st['thinking'] = \$step;"],
+    ['thinking never completed', $file, "            yield self::event(\$st['thinking'], 'thinking.completed', [], \$st['last']);\n", ''],
+    ['thinking stays open into text', $file, "        if (\$type === RunStep::TEXT) {\n            yield from \$this->closeThinking(\$st);", "        if (\$type === RunStep::TEXT) {"],
+    ['thinking delta loses its text', $file, "'thinking.delta', ['text' => self::str(\$step['delta'] ?? '')]", "'thinking.delta', ['text' => '']"],
+
+    // Text.
+    ['text opens no message', $file, "                yield self::event(\$step, 'message.created', ['message' => ['id' => \$messageId, 'role' => 'assistant', 'parts' => []]]);\n", ''],
+    ['text message is the user\'s', $file, "'role' => 'assistant', 'parts' => []", "'role' => 'user', 'parts' => []"],
+    ['text part never started', $file, "                yield self::event(\$step, 'part.started', ['messageId' => \$messageId, 'part' => ['id' => 'text', 'kind' => 'text', 'format' => 'markdown', 'text' => '']]);\n", ''],
+    ['text part is plain', $file, "'format' => 'markdown', 'text' => ''", "'format' => 'plain', 'text' => ''"],
+    ['text delta dropped', $file, "'partId' => \$st['text']['partId'], 'text' => self::str(\$step['delta'] ?? '')]", "'partId' => \$st['text']['partId'], 'text' => '']"],
+    ['every text delta opens a message', $file, "            if (\$st['text'] === null) {\n                \$messageId", "            if (true) {\n                \$messageId"],
+    ['text part never completed', $file, "            yield self::event(\$st['text']['step'], 'part.completed', ['messageId' => \$st['text']['messageId'], 'partId' => \$st['text']['partId']], \$st['last']);\n", ''],
+    ['text after a tool joins the old message', $file, "        yield from \$this->closeAll(\$st);\n        switch (\$type) {", "        yield from \$this->closeThinking(\$st);\n        switch (\$type) {"],
+    ['closing event carries the opening step', $file, "\$at = \$cause ?? \$step;", '$at = $step;'],
+
+    // Tools.
+    ['tool.called loses its args', $file, "                    'args' => \$args,\n                    'startedAt'", "                    'args' => [],\n                    'startedAt'"],
+    ['tool.called loses startedAt', $file, "'startedAt' => \$step['startedAt'] ?? null,", "'startedAt' => null,"],
+    ['tool.called loses its name', $file, "                    'name' => self::str(\$step['name'] ?? ''),\n                    'args'", "                    'name' => 'tool',\n                    'args'"],
+    ['refusal read as failure', $file, "'outcome' => \$refused ? 'refusal' : (\$ok ? 'ok' : 'failure'),", "'outcome' => \$ok ? 'ok' : 'failure',"],
+    ['a refused ok is ok', $file, "\$ok = (\$step['ok'] ?? null) === true && ! \$refused;", "\$ok = (\$step['ok'] ?? null) === true;"],
+    ['failure read as ok', $file, "\$ok = (\$step['ok'] ?? null) === true && ! \$refused;", "\$ok = ! \$refused;"],
+    ['failure output is the result', $file, "'output' => \$ok ? self::str(\$step['result'] ?? '') : self::str(\$error['message'] ?? ''),", "'output' => self::str(\$step['result'] ?? ''),"],
+    ['ok output is the error', $file, "'output' => \$ok ? self::str(\$step['result'] ?? '') : self::str(\$error['message'] ?? ''),", "'output' => self::str(\$error['message'] ?? ''),"],
+    ['duration always exact', $file, "'durationExact' => (\$step['durationExact'] ?? null) === true,", "'durationExact' => (\$step['durationExact'] ?? null) !== false,"],
+    ['durationExact dropped', $file, "'durationExact' => (\$step['durationExact'] ?? null) === true,", ''],
+    ['durationMs dropped', $file, "                    \$data['durationMs'] = \$step['durationMs'];\n", ''],
+    ['error code dropped', $file, "                    \$data['errorCode'] = self::str(\$error['code'] ?? '');\n", ''],
+
+    // Approvals.
+    ['approval request ignored', $file, "                yield self::event(\$step, 'approval.requested', ['approval' => \$approval]);\n", ''],
+    ['approval never parks the turn', $file, "            } elseif (\$st['approvals'] > 0 && (", "            } elseif (false && ("],
+    ['approval forgets its tool call', $file, "\$call = \$toolCallId !== null ? (\$st['calls'][\$toolCallId] ?? null) : null;", '$call = null;'],
+    ['host wording ignored', $file, "                    (\$this->present)(\$request),\n", "                    self::english(\$request),\n"],
+    ['approval not marked as Harness\'s', $file, "                        'origin' => self::ORIGIN,\n", ''],
+    ['resume answers foreign approvals', $file, "if ((\$a['origin'] ?? null) !== self::ORIGIN || ! in_array(", "if (! in_array("],
+    ['resume answers only the last approval', $file, "        if (\$chat instanceof FancyChat) {\n            foreach", "        if (false) {\n            foreach"],
+    ['resume answers another turn\'s approval', $file, "if ((\$a['turnId'] ?? null) === \$input->turnId && is_string(", "if (is_string("],
+    ['a rejection approves', $file, "\$a['decision'] === 'approve', is_string(", "\$a['decision'] !== 'edit', is_string("],
+    ['the note is not the reason', $file, "is_string(\$a['note'] ?? null) ? \$a['note'] : null);", 'null);'],
+    ['resume actor dropped', $file, "RunContext::metadata(\$input->turnId, self::actorOf(\$input->approval['decidedBy'] ?? null))", "RunContext::metadata(\$input->turnId)"],
+    ['resume turn dropped', $file, "RunContext::metadata(\$input->turnId, self::actorOf(", "RunContext::metadata(null, self::actorOf("],
+    ['resume with nothing to decide still resumes', $file, "            if (\$decisions === []) {\n                yield self::fail('harness.no-decisions');\n\n                return;\n            }", ''],
+    ['decision_recorded renamed', $file, "self::EXTENSION.'.decision-recorded', [", "self::EXTENSION.'.decided', ["],
+    ['decision verdict dropped', $file, "'verdict' => \$step['verdict'] ?? null,", "'verdict' => null,"],
+
+    // Errors and unknowns.
+    ['error step ignored', $file, "\$st['failure'] ??= 'harness.error: '", "\$unused = 'harness.error: '"],
+    ['error does not fail the turn', $file, "            if (\$st['failure'] !== null) {\n                yield self::fail(\$st['failure']);", "            if (false) {\n                yield self::fail(\$st['failure']);"],
+    ['unknown step type ignored', $file, "        yield self::fail('harness.step-type: '.(is_string(\$type) ? \$type : 'none'));\n\n        return false;", "        return true;"],
+    ['open parts left open on a throw', $file, "                yield from \$this->closeAll(\$st);\n                yield from \$this->flushRuns(\$key);\n\n                throw \$e;", "                throw \$e;"],
+
+    // Run events and correlation.
+    ['run events never collected', $file, "                \$this->runEvents[\$event->sessionKey][] = \$event;", ';'],
+    ['other sessions\' runs collected', $file, "if (array_key_exists(\$event->sessionKey, \$this->runEvents)) {", "if (\$this->runEvents !== []) {\n                \$this->runEvents[array_key_first(\$this->runEvents)][] = \$event;\n            } elseif (false) {"],
+    ['run events only flushed at the end', $file, "                foreach (\$open() as \$raw) {\n                    yield from \$this->flushRuns(\$key);", "                foreach (\$open() as \$raw) {"],
+    ['parentRunId dropped from runs', $file, "\$envelope = ['runId' => \$event->runId, 'parentRunId' => \$event->parentRunId,", "\$envelope = ['runId' => \$event->runId, 'parentRunId' => null,"],
+    ['root run has no rootRunId', $file, "'rootRunId' => \$event->rootRunId ?? \$event->runId];", "'rootRunId' => \$event->rootRunId];"],
+    ['resumed run reads as started', $file, "\$event instanceof RunResumed => ['type' => self::EXTENSION.'.run-resumed',", "\$event instanceof RunResumed => ['type' => 'run.started',"],
+    ['run.finished loses its reason', $file, "'data' => ['finishReason' => \$event->finishReason,", "'data' => ['finishReason' => null,"],
+    ['step runId not on the envelope', $file, "            'type' => \$type,\n            'runId' => \$runId,", "            'type' => \$type,\n            'runId' => null,"],
+    ['step parentRunId dropped', $file, "'parentRunId' => \$step['parentRunId'] ?? null,", "'parentRunId' => null,"],
+    ['step rootRunId dropped', $file, "'rootRunId' => \$step['rootRunId'] ?? \$runId,", "'rootRunId' => \$runId,"],
+    ['harness seq dropped', $file, "'seq' => \$at['seq'] ?? null,", "'seq' => null,"],
+    ['harness turnId dropped', $file, "'turnId' => \$at['turnId'] ?? null,", "'turnId' => null,"],
+    ['chat turn not passed to Harness', $file, "\$context = RunContext::metadata(\$input->turnId);", '$context = null;'],
+
+    // Prompt and cancel.
+    ['empty prompt sent to Harness', $file, "            if (trim(\$prompt) === '') {", '            if (false) {'],
+    ['prompt keeps only the last text', $file, "                \$texts[] = \$part['text'];", "                \$texts = [\$part['text']];"],
+    ['cancel claimed without Harness support', $file, "return method_exists(\$this->sessionClass, 'cancel');", 'return true;'],
+    ['cancel outcomes not checked', $file, "return in_array(\$value, CancelOutcome::ALL, true) ? \$value : CancelOutcome::UNCERTAIN;", 'return (string) $value;'],
+    ['enum outcome not read by value', $file, "\$value = \$outcome instanceof BackedEnum ? \$outcome->value : \$outcome;", '$value = $outcome;'],
+    ['no run reads as ok', $file, "                return CancelOutcome::NO_TURN;", "                return CancelOutcome::OK;"],
+    ['a throwing cancel reads as ok', $file, "            self::report(\$e);\n\n            return CancelOutcome::UNCERTAIN;", "            self::report(\$e);\n\n            return CancelOutcome::OK;"],
+    ['cancels the wrong run', $file, "\$outcome = \$session->cancel(\$run['id']);", "\$outcome = \$session->cancel('run_other');"],
+
+    // Attachments (0.2.0).
+    ['resolved media never sent', $file, "\$session->streamSteps(\$prompt, null, \$media, \$context)", "\$session->streamSteps(\$prompt, null, [], \$context)"],
+    ['resolved media dropped', $file, "                \$out['media'][] = \$resolved;\n", ''],
+    ['Harness admission skipped', $file, "\$media = TurnAttachments::admit(\$prompt, \$attached['media']);", "\$media = \$attached['media'];"],
+    ['a bad resolver answer is ignored', $file, "                return \$out + ['error' => 'resolver_result'];", '                continue;'],
+    ['a withheld attachment names its ref', $file, "'[Attachment withheld: '.self::label(\$kind === 'image' ? (\$part['alt'] ?? '') : (\$part['name'] ?? ''), \$kind).']'", "'[Attachment withheld: '.\$part['ref'].']'"],
+    ['a withheld attachment is not logged', $file, "                yield ['type' => self::EXTENSION.'.attachment-withheld', 'data' => ['partId' => \$partId]];\n", ''],
+    ['an attachment-only message has no prompt', $file, "\$prompt = trim(\$prompt) === '' ? implode(\"\\n\", \$attached['lines']) : ", "\$prompt = trim(\$prompt) === '' ? '' : "],
+    ['a label may break its brackets', $file, '\'/[\p{Cc}\[\]]+/u\'', '\'/[\p{Cc}]+/u\''],
+    ['the author comes from nowhere', $file, "            \$author ??= \$this->authorOf(\$input);\n", ''],
+    ['resolver answers are never pointers', $file, "                \$out['lines'][] = '['.\$label.'] '.self::label(\$resolved, '');", "                \$out['lines'][] = '['.\$label.']';"],
+
+    // sourceTitle (CC-fancy-0044) and optional prism-graph.
+    ['kb: chunks by id unlabelled', 'src/Prism/KnowledgeBridge.php', "return self::listing(\$this->titled(\$graph, \$this->hydrate(\$graph, \$graph->get(\$ids))));", "return self::listing(\$this->hydrate(\$graph, \$graph->get(\$ids)));"],
+    ['kb: search unlabelled', 'src/Prism/KnowledgeBridge.php', "\$items = \$this->titled(\$graph, \$this->hydrate(\$graph, array_map(", "\$items = (fn (\$g, \$i) => \$i)(\$graph, \$this->hydrate(\$graph, array_map("],
+    ['kb: source chunks unlabelled', 'src/Prism/KnowledgeBridge.php', "        \$listing['items'] = \$this->titled(\$graph, \$listing['items']);\n", ''],
+    ['kb: label from the wrong field', 'src/Prism/KnowledgeBridge.php', "is_string(\$found['title'] ?? null) ? \$found['title'] : null", "is_string(\$found['sourceId'] ?? null) ? \$found['sourceId'] : null"],
+    ['kb: prism-graph always available', 'src/Prism/KnowledgeBridge.php', "        return class_exists(ScopedGraph::class) && method_exists(ScopedGraph::class, 'getSource');", '        return true;'],
+    ['kb: routes mount without prism-graph', 'src/Prism/KnowledgeBridge.php', "        if (! self::available()) {\n            throw new LogicException(", "        if (false) {\n            throw new LogicException("],
+];
+
+$failed = [];
+$missing = [];
+foreach ($mutations as [$name, $target, $search, $replace]) {
+    $path = $root.'/'.$target;
+    $original = (string) file_get_contents($path);
+    if (substr_count($original, $search) !== 1) {
+        echo "MISSING  {$name}: pattern found ".substr_count($original, $search)." times in {$target}\n";
+        $missing[] = $name;
+
+        continue;
+    }
+    try {
+        file_put_contents($path, str_replace($search, $replace, $original));
+        $cmd = escapeshellarg(PHP_BINARY).' '.escapeshellarg($root.'/vendor/bin/pest').' --bail 2>&1';
+        $proc = proc_open($cmd, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $root);
+        stream_get_contents($pipes[1]);
+        stream_get_contents($pipes[2]);
+        $code = proc_close($proc);
+        if ($code === 0) {
+            echo "SURVIVED {$name}\n";
+            $failed[] = $name;
+        } else {
+            echo "caught   {$name}\n";
+        }
+    } finally {
+        file_put_contents($path, $original);
+    }
+}
+
+$total = count($mutations);
+$caught = $total - count($failed) - count($missing);
+echo "sabotage: {$total} mutations, {$caught} caught, ".count($failed).' survived, '.count($missing)." missing\n";
+exit($missing !== [] ? 2 : ($failed !== [] ? 1 : 0));

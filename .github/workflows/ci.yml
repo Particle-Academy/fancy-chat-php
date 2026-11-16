@@ -117,6 +117,10 @@ jobs:
       - name: Sabotage sweep
         run: php tests/sabotage.php
 
+      # The Prism Harness mapping, attachments and the knowledge bridge (src/Prism/).
+      - name: Sabotage sweep (Prism)
+        run: php tests/sabotage-prism.php
+
       - name: Lint
         run: php tests/lint.php
 

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use FancyChat\Backend\NullBackend;
+use FancyChat\Tests\Support\ScriptedBackend;
 use FancyChat\Tests\Support\CaptureBroadcaster;
 use Illuminate\Http\Request;
 
@@ -37,7 +37,7 @@ it('answers 401 when the resolver finds no actor, and 403 when access is refused
 it('asks the host for the right ability on each route', function (): void {
     chatApp(['fancy-chat.sse.max_duration_ms' => 0]);
     $asked = [];
-    bindHost()->backend(new NullBackend(fn (): iterable => []))
+    bindHost()->backend(new ScriptedBackend(fn (): iterable => []))
         ->access(function (Request $request, string $thread, string $ability) use (&$asked): bool {
             $asked[] = $thread.':'.$ability;
 
@@ -57,7 +57,7 @@ it('grants access only on a literal true, never a truthy value', function (mixed
 
 it('only lets a human send a message', function (): void {
     chatApp();
-    bindHost()->backend(new NullBackend(fn (): iterable => []));
+    bindHost()->backend(new ScriptedBackend(fn (): iterable => []));
     $r = http('POST', '/fancy-chat/threads/t_1/messages', textMessage('hi'), 'agent:compass');
     expect($r['status'])->toBe(403)->and($r['body'])->toBe(['error' => 'chat.actor.human']);
 });

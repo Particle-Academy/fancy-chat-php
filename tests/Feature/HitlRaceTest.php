@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use FancyChat\Backend\NullBackend;
+use FancyChat\Tests\Support\ScriptedBackend;
 use FancyChat\Backend\TurnInput;
 use FancyChat\Jobs\RunTurn;
 use Illuminate\Support\Facades\DB;
@@ -19,7 +19,7 @@ it('a decision made while the approval is being published resumes the turn once 
     chatApp(['fancy-chat.store' => 'database']);
     Queue::fake();
     $inputs = [];
-    bindHost()->backend(new NullBackend(function (TurnInput $input) use (&$inputs): iterable {
+    bindHost()->backend(new ScriptedBackend(function (TurnInput $input) use (&$inputs): iterable {
         $inputs[] = $input;
         if ($input->kind === 'resume') {
             yield ['type' => 'message.created', 'data' => ['message' => ['id' => 'done', 'role' => 'assistant', 'parts' => [['id' => 'p', 'kind' => 'text', 'format' => 'plain', 'text' => 'Stored.']]]]];

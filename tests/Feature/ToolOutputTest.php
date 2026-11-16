@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use FancyChat\Backend\NullBackend;
+use FancyChat\Tests\Support\ScriptedBackend;
 use FancyChat\Backend\TurnInput;
 
 /*
@@ -13,9 +13,9 @@ use FancyChat\Backend\TurnInput;
  */
 
 /** A backend whose one tool returns `$output` (or fails with it). */
-function outputBackend(mixed $output, string $outcome = 'ok', array $extra = []): NullBackend
+function outputBackend(mixed $output, string $outcome = 'ok', array $extra = []): ScriptedBackend
 {
-    return new NullBackend(function (TurnInput $input) use ($output, $outcome, $extra): iterable {
+    return new ScriptedBackend(function (TurnInput $input) use ($output, $outcome, $extra): iterable {
         yield ['type' => 'tool.called', 'runId' => 'r_'.$input->turnId, 'data' => ['toolCallId' => 'tc_'.$input->turnId, 'name' => 'search', 'args' => []]];
         yield ['type' => 'tool.result', 'runId' => 'r_'.$input->turnId, 'data' => ['toolCallId' => 'tc_'.$input->turnId, 'outcome' => $outcome, 'output' => $output] + $extra];
     });

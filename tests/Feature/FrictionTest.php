@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use FancyChat\Backend\NullBackend;
+use FancyChat\Tests\Support\ScriptedBackend;
 use FancyChat\Backend\TurnInput;
 use FancyChat\ChatException;
 use FancyChat\Jobs\RunTurn;
@@ -52,7 +52,7 @@ it('send answers 201 with messageId, seq and delivery; snapshot answers {snapsho
 
 it('GET threads/{id}/capabilities reports the backend\'s, so a UI can hide Stop', function (): void {
     chatApp();
-    bindHost()->backend(new NullBackend(fn (): iterable => [], ['steering' => false, 'cancel' => false, 'approvals' => true]));
+    bindHost()->backend(new ScriptedBackend(fn (): iterable => [], ['steering' => false, 'cancel' => false, 'approvals' => true]));
     $r = http('GET', '/fancy-chat/threads/t_1/capabilities', null, 'human:u_1');
     expect($r['status'])->toBe(200)->and($r['body'])->toBe(['capabilities' => ['steering' => false, 'cancel' => false, 'approvals' => true]]);
 });
@@ -68,7 +68,7 @@ it('capabilities without a backend are all false, and the read is access-checked
 
 it('capabilities report booleans only: a backend returning anything else reads as false', function (): void {
     chatApp();
-    bindHost()->backend(new NullBackend(fn (): iterable => [], ['steering' => 'yes', 'cancel' => 1, 'approvals' => true]));
+    bindHost()->backend(new ScriptedBackend(fn (): iterable => [], ['steering' => 'yes', 'cancel' => 1, 'approvals' => true]));
     expect(http('GET', '/fancy-chat/threads/t_1/capabilities', null, 'human:u_1')['body']['capabilities'])
         ->toBe(['steering' => false, 'cancel' => false, 'approvals' => true]);
 });
@@ -76,7 +76,7 @@ it('capabilities report booleans only: a backend returning anything else reads a
 it('a resumed turn carries ALL of its decided approvals, not only the last', function (): void {
     chatApp();
     $inputs = [];
-    bindHost()->backend(new NullBackend(function (TurnInput $input) use (&$inputs): iterable {
+    bindHost()->backend(new ScriptedBackend(function (TurnInput $input) use (&$inputs): iterable {
         $inputs[] = $input;
         if ($input->kind === 'resume') {
             return;
@@ -178,7 +178,7 @@ it('a host append without a turnId takes the thread\'s active turn, on the event
 
 it('a backend\'s approval preview is still checked as AGENT parts: it cannot place an approval part', function (): void {
     chatApp();
-    bindHost()->backend(new NullBackend(function (TurnInput $input): iterable {
+    bindHost()->backend(new ScriptedBackend(function (TurnInput $input): iterable {
         yield ['type' => 'approval.requested', 'data' => ['approval' => [
             'approvalId' => 'ap_x', 'title' => 'x',
             'preview' => [['id' => 'pv', 'kind' => 'approval', 'approvalId' => 'ap_other']],

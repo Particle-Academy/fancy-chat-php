@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use FancyChat\Backend\NullBackend;
+use FancyChat\Tests\Support\ScriptedBackend;
 use FancyChat\Backend\TurnInput;
 use FancyChat\ChatException;
 use FancyChat\Contract\Projection;
@@ -122,7 +122,7 @@ it('withdraws a parked approval when the turn is stopped', function (): void {
 it('answers a question only from a human with a complete answer, then resumes', function (): void {
     chatApp();
     $inputs = [];
-    bindHost()->backend(new NullBackend(function (TurnInput $input) use (&$inputs): iterable {
+    bindHost()->backend(new ScriptedBackend(function (TurnInput $input) use (&$inputs): iterable {
         $inputs[] = $input;
         if ($input->kind === 'resume') {
             return;
@@ -185,7 +185,7 @@ it('caps the queue at the configured length', function (): void {
 
 it('reports every cancel outcome', function (): void {
     chatApp();
-    $backend = new NullBackend(fn (): iterable => [], ['steering' => false, 'cancel' => true, 'approvals' => false], 'uncertain');
+    $backend = new ScriptedBackend(fn (): iterable => [], ['steering' => false, 'cancel' => true, 'approvals' => false], 'uncertain');
     bindHost()->backend($backend);
     expect(http('POST', '/fancy-chat/threads/t_1/cancel', ['mode' => 'stop'], 'human:u_1')['body'])->toBe(['outcome' => 'no-turn']);
     http('POST', '/fancy-chat/threads/t_1/messages', textMessage('hi'), 'human:u_1');
@@ -193,7 +193,7 @@ it('reports every cancel outcome', function (): void {
     expect(http('POST', '/fancy-chat/threads/t_1/cancel', ['mode' => 'sideways'], 'human:u_1')['status'])->toBe(422);
 
     chatApp();
-    bindHost()->backend(new NullBackend(function () {
+    bindHost()->backend(new ScriptedBackend(function () {
         yield ['type' => 'turn.transition', 'data' => ['action' => 'park']];
     }, ['steering' => false, 'cancel' => true, 'approvals' => false], 'uncertain'));
     http('POST', '/fancy-chat/threads/t_2/messages', textMessage('hi'), 'human:u_1');
@@ -201,14 +201,14 @@ it('reports every cancel outcome', function (): void {
     expect(chat()->snapshot('t_2')['turns'][0]['state'])->toBe('cancelling');
 
     chatApp();
-    bindHost()->backend(new NullBackend(function () {
+    bindHost()->backend(new ScriptedBackend(function () {
         yield ['type' => 'turn.transition', 'data' => ['action' => 'park']];
     }, ['steering' => false, 'cancel' => false, 'approvals' => false]));
     http('POST', '/fancy-chat/threads/t_3/messages', textMessage('hi'), 'human:u_1');
     expect(http('POST', '/fancy-chat/threads/t_3/cancel', ['mode' => 'stop'], 'human:u_1')['body'])->toBe(['outcome' => 'unsupported']);
 
     chatApp();
-    bindHost()->backend(new NullBackend(function () {
+    bindHost()->backend(new ScriptedBackend(function () {
         yield ['type' => 'turn.transition', 'data' => ['action' => 'park']];
     }, ['steering' => false, 'cancel' => true, 'approvals' => false], 'ok'));
     http('POST', '/fancy-chat/threads/t_4/messages', textMessage('hi'), 'human:u_1');
@@ -219,7 +219,7 @@ it('reports every cancel outcome', function (): void {
 
 it('passes the configured confirm wait to the backend', function (): void {
     chatApp(['fancy-chat.cancel.confirm_wait_ms' => 750]);
-    $backend = new NullBackend(function () {
+    $backend = new ScriptedBackend(function () {
         yield ['type' => 'turn.transition', 'data' => ['action' => 'park']];
     }, ['steering' => false, 'cancel' => true, 'approvals' => false], 'refused');
     bindHost()->backend($backend);

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use FancyChat\Backend\NullBackend;
+use FancyChat\Tests\Support\ScriptedBackend;
 use FancyChat\Backend\TurnInput;
 use FancyChat\Events\ChatTurnParking;
 use FancyChat\Events\ChatTurnSettled;
@@ -31,7 +31,7 @@ function approvalRecordFor(string $id): array
 it('buffers a backend\'s approval until the turn parks: nobody can see or decide it while the turn runs', function (string $store): void {
     chatApp(['fancy-chat.store' => $store]);
     $seen = [];
-    bindHost()->backend(new NullBackend(function (TurnInput $input) use (&$seen): iterable {
+    bindHost()->backend(new ScriptedBackend(function (TurnInput $input) use (&$seen): iterable {
         if ($input->kind === 'resume') {
             return;
         }
@@ -69,7 +69,7 @@ it('ChatTurnParking runs BEFORE the approval is indexed, so evidence a host reco
             $evidenceAtInsert ??= $evidence;
         }
     });
-    bindHost()->backend(new NullBackend(function (TurnInput $input): iterable {
+    bindHost()->backend(new ScriptedBackend(function (TurnInput $input): iterable {
         yield ['type' => 'approval.requested', 'data' => ['approval' => approvalRecordFor('ap_1')]];
         yield ['type' => 'turn.transition', 'data' => ['action' => 'park']];
     }));
@@ -80,7 +80,7 @@ it('ChatTurnParking runs BEFORE the approval is indexed, so evidence a host reco
 it('a question is buffered the same way', function (): void {
     chatApp();
     $located = 'unset';
-    bindHost()->backend(new NullBackend(function (TurnInput $input) use (&$located): iterable {
+    bindHost()->backend(new ScriptedBackend(function (TurnInput $input) use (&$located): iterable {
         yield ['type' => 'question.asked', 'data' => ['question' => ['questionId' => 'q_1', 'prompt' => 'Which?', 'fields' => [['id' => 'f', 'type' => 'text', 'required' => true]]]]];
         $located = chat()->store()->locate('q_1');
         yield ['type' => 'turn.transition', 'data' => ['action' => 'park']];
@@ -91,7 +91,7 @@ it('a question is buffered the same way', function (): void {
 
 it('a turn that settles without parking never publishes its buffered approval', function (): void {
     chatApp();
-    bindHost()->backend(new NullBackend(function (TurnInput $input): iterable {
+    bindHost()->backend(new ScriptedBackend(function (TurnInput $input): iterable {
         yield ['type' => 'approval.requested', 'data' => ['approval' => approvalRecordFor('ap_1')]];
     }));
     http('POST', '/fancy-chat/threads/t_1/messages', textMessage('x'), 'human:u_1');
@@ -106,7 +106,7 @@ it('a turn that settles without parking never publishes its buffered approval', 
 it('a decision recorded while its turn still runs is queued: the turn resumes by itself once it parks', function (): void {
     chatApp();
     $inputs = [];
-    bindHost()->backend(new NullBackend(function (TurnInput $input) use (&$inputs): iterable {
+    bindHost()->backend(new ScriptedBackend(function (TurnInput $input) use (&$inputs): iterable {
         $inputs[] = $input;
         if ($input->kind === 'resume') {
             yield ['type' => 'message.created', 'data' => ['message' => ['id' => 'done', 'role' => 'assistant', 'parts' => [['id' => 'p', 'kind' => 'text', 'format' => 'plain', 'text' => 'Done.']]]]];
@@ -145,7 +145,7 @@ it('ChatTurnSettled fires once per settled turn, with its outcome and reason, af
     http('POST', '/fancy-chat/threads/t_1/messages', textMessage('one'), 'human:u_1');
     expect($seen)->toHaveCount(1)->and($seen[0])->toBe(['t_1', 'completed', null, true]);
 
-    bindHost()->backend(new NullBackend(fn (TurnInput $i): iterable => [['type' => 'turn.settled', 'data' => ['action' => 'fail', 'reason' => 'output_limit']]]));
+    bindHost()->backend(new ScriptedBackend(fn (TurnInput $i): iterable => [['type' => 'turn.settled', 'data' => ['action' => 'fail', 'reason' => 'output_limit']]]));
     http('POST', '/fancy-chat/threads/t_1/messages', textMessage('two'), 'human:u_1');
     expect($seen)->toHaveCount(2)->and($seen[1])->toBe(['t_1', 'failed', 'output_limit', false]);
     expect(new ChatTurnSettled('t', 'u', 'completed', null))->toBeInstanceOf(ShouldDispatchAfterCommit::class);
@@ -165,7 +165,7 @@ it('ChatTurnSettled is not fired for a park', function (): void {
 it('a backend that parks again after a resume, with nothing new decided, waits: no resume loop', function (): void {
     chatApp();
     $starts = 0;
-    bindHost()->backend(new NullBackend(function (TurnInput $input) use (&$starts): iterable {
+    bindHost()->backend(new ScriptedBackend(function (TurnInput $input) use (&$starts): iterable {
         if (++$starts > 5) {
             throw new RuntimeException('resume loop');
         }

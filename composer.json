@@ -1,12 +1,14 @@
 {
     "name": "particle-academy/fancy-chat-php",
-    "description": "Laravel server for the neutral agent-chat contract: an append-only thread log with an atomic, gapless seq, SSE plus long-poll with resumable replay, the turn machine, staged writes and decision endpoints that accept human actors only. Provider-neutral, no Prism dependency. Twin of @particle-academy/fancy-chat-js.",
+    "description": "Laravel agent chat on Prism Harness: runs each turn on a Harness session (RunStep contract g282.1, streamed approvals, attachments) and serves it as an append-only thread log with an atomic, gapless seq, SSE plus long-poll with resumable replay, the turn machine, staged writes and decision endpoints that accept human actors only. Optional knowledge explorer on prism-graph. Twin of @particle-academy/fancy-chat-js.",
     "type": "library",
     "license": "MIT",
     "keywords": [
         "laravel",
         "agent",
         "chat",
+        "prism",
+        "prism-harness",
         "human-in-the-loop",
         "hitl",
         "sse",
@@ -40,11 +42,20 @@
         "illuminate/http": "^13.0",
         "illuminate/queue": "^13.0",
         "illuminate/routing": "^13.0",
-        "illuminate/support": "^13.0"
+        "illuminate/support": "^13.0",
+        "particle-academy/prism": ">=0.143 <2.0",
+        "particle-academy/prism-harness": ">=0.26 <2.0"
     },
     "require-dev": {
         "laravel/framework": "^13.30",
+        "particle-academy/prism-graph": "^0.4",
         "pestphp/pest": "^5.0"
+    },
+    "suggest": {
+        "particle-academy/prism-graph": ">=0.4, for FancyChat\\Prism\\KnowledgeBridge (the knowledge explorer's routes)"
+    },
+    "replace": {
+        "particle-academy/fancy-chat-prism-php": "*"
     },
     "autoload": {
         "psr-4": {
