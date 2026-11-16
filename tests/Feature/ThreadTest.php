@@ -218,6 +218,6 @@ it('settles a turn as failed when the backend throws', function (): void {
     http('POST', '/fancy-chat/threads/t_1/messages', textMessage('hi'), 'human:u_1');
     $events = pollAll('t_1');
     $turn = Projection::project($events)['turns'][0];
-    expect($turn)->toBe(['turnId' => $turn['turnId'], 'state' => 'settled', 'outcome' => 'failed', 'reason' => 'backend.error']);
+    expect($turn)->toMatchArray(['turnId' => $turn['turnId'], 'state' => 'settled', 'outcome' => 'failed', 'reason' => 'backend.error']);
     expect(json_encode($events))->not->toContain('sk-123');
 });

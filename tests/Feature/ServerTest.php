@@ -100,7 +100,7 @@ it('reaps a stalled turn after the configured timeout, leaving parked turns alon
     expect(chat()->reap())->toBe(0);
     tick(1);
     expect(chat()->reap())->toBe(1);
-    expect(chat()->snapshot('t_run')['turns'][0])->toBe(['turnId' => 'u_1', 'state' => 'settled', 'outcome' => 'failed', 'reason' => 'stalled'])
+    expect(chat()->snapshot('t_run')['turns'][0])->toBe(['turnId' => 'u_1', 'state' => 'settled', 'outcome' => 'failed', 'reason' => 'stalled', 'messageId' => null])
         ->and(chat()->snapshot('t_park')['turns'][0]['state'])->toBe('awaiting-human');
 
     config(['fancy-chat.reaper.include_parked' => true]);

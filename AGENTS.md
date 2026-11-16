@@ -66,6 +66,13 @@ No Prism dependency.
     decisions are routed by id. `append()` (the host's) and a backend's go through it.
 16. **A resume carries every decided approval and answered question of its turn**
     (`TurnInput::$approvals` / `$questions`), not only the one that triggered it.
+17. **A backend's approvals and questions are actionable only once its turn parks.**
+    `heldHitl` holds them; `publishHeld` fires ChatTurnParking, then publishes, then the
+    park is appended. A turn that ends without parking never publishes them.
+18. **A decision made during a run resumes the turn when it parks** (queue-and-resume),
+    and only a decision made during THAT run (`decidedBefore`): no resume loops.
+19. **ChatTurnSettled fires once per turn**, after commit, only when an append actually
+    settles it.
 
 ## Known limits
 

@@ -218,7 +218,7 @@
         "name": "a streamed answer with thinking and a tool",
         "events": [
           { "seq": 1, "type": "message.created", "actor": { "kind": "human", "id": "u_1" }, "data": { "turnId": "u_4", "message": { "id": "m_1", "role": "user", "parts": [{ "id": "p1", "kind": "text", "format": "plain", "text": "Find Acme" }], "delivery": "sent" } } },
-          { "seq": 2, "type": "turn.started", "actor": { "kind": "system", "id": "server" }, "data": { "turnId": "u_4" } },
+          { "seq": 2, "type": "turn.started", "actor": { "kind": "system", "id": "server" }, "data": { "turnId": "u_4", "messageId": "m_1" } },
           { "seq": 3, "type": "turn.transition", "actor": { "kind": "system", "id": "server" }, "data": { "turnId": "u_4", "action": "start" } },
           { "seq": 4, "type": "delivery.changed", "actor": { "kind": "system", "id": "server" }, "data": { "messageId": "m_1", "action": "deliver" } },
           { "seq": 5, "type": "thinking.started", "runId": "r_9" },
@@ -239,7 +239,7 @@
         "expect": {
           "lastSeq": 18,
           "illegal": 0,
-          "turns": [{ "turnId": "u_4", "state": "settled", "outcome": "completed", "reason": null }],
+          "turns": [{ "turnId": "u_4", "state": "settled", "outcome": "completed", "reason": null, "messageId": "m_1" }],
           "approvals": [],
           "questions": [],
           "rows": [
@@ -285,6 +285,31 @@
         }
       },
       {
+        "name": "a turn links to the message that started it, both ways",
+        "events": [
+          { "seq": 1, "type": "message.created", "actor": { "kind": "human", "id": "u_1" }, "data": { "message": { "id": "m_1", "role": "user", "parts": [{ "id": "p1", "kind": "text", "format": "plain", "text": "Draft it" }], "delivery": "sent" } } },
+          { "seq": 2, "type": "turn.started", "actor": { "kind": "system", "id": "server" }, "data": { "turnId": "u_1", "messageId": "m_1" } },
+          { "seq": 3, "type": "turn.started", "actor": { "kind": "system", "id": "server" }, "data": { "turnId": "u_2", "messageId": "m_missing" } },
+          { "seq": 4, "type": "turn.started", "actor": { "kind": "system", "id": "server" }, "data": { "turnId": "u_3", "messageId": 7 } },
+          { "seq": 5, "type": "turn.started", "actor": { "kind": "system", "id": "server" }, "data": { "turnId": "u_4", "messageId": "m_1" } }
+        ],
+        "expect": {
+          "lastSeq": 5,
+          "illegal": 0,
+          "turns": [
+            { "turnId": "u_1", "state": "pending", "outcome": null, "reason": null, "messageId": "m_1" },
+            { "turnId": "u_2", "state": "pending", "outcome": null, "reason": null, "messageId": null },
+            { "turnId": "u_3", "state": "pending", "outcome": null, "reason": null, "messageId": null },
+            { "turnId": "u_4", "state": "pending", "outcome": null, "reason": null, "messageId": "m_1" }
+          ],
+          "approvals": [],
+          "questions": [],
+          "rows": [
+            { "kind": "message", "id": "m_1", "role": "user", "author": { "kind": "human", "id": "u_1" }, "turnId": "u_1", "parts": [{ "id": "p1", "kind": "text", "format": "plain", "text": "Draft it" }], "open": [], "delivery": "sent", "supersedes": null, "retracted": false, "superseded": false }
+          ]
+        }
+      },
+      {
         "name": "replays and duplicates are idempotent",
         "events": [
           { "seq": 1, "type": "turn.started", "data": { "turnId": "u_1" } },
@@ -293,7 +318,7 @@
           { "seq": 1, "type": "turn.started", "data": { "turnId": "u_1" } },
           { "seq": 3, "type": "turn.transition", "data": { "turnId": "u_1", "action": "park" } }
         ],
-        "expect": { "lastSeq": 3, "illegal": 0, "turns": [{ "turnId": "u_1", "state": "awaiting-human", "outcome": null, "reason": null }], "approvals": [], "questions": [], "rows": [] }
+        "expect": { "lastSeq": 3, "illegal": 0, "turns": [{ "turnId": "u_1", "state": "awaiting-human", "outcome": null, "reason": null, "messageId": null }], "approvals": [], "questions": [], "rows": [] }
       },
       {
         "name": "illegal transitions are counted and never corrupt state",
@@ -310,7 +335,7 @@
           { "seq": 10, "type": "turn.transition", "data": { "turnId": "u_404", "action": "start" } },
           { "seq": 11, "type": "delivery.changed", "data": { "messageId": "m_404", "action": "deliver" } }
         ],
-        "expect": { "lastSeq": 11, "illegal": 7, "turns": [{ "turnId": "u_1", "state": "settled", "outcome": "failed", "reason": "stalled" }], "approvals": [], "questions": [], "rows": [] }
+        "expect": { "lastSeq": 11, "illegal": 7, "turns": [{ "turnId": "u_1", "state": "settled", "outcome": "failed", "reason": "stalled", "messageId": null }], "approvals": [], "questions": [], "rows": [] }
       },
       {
         "name": "an approval decided by a human and applied",

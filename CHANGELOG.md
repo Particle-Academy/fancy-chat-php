@@ -8,6 +8,29 @@ version number is not a stability promise until 1.0; read the entry.
 
 ## [Unreleased]
 
+### Added (impactium follow-ups)
+
+- **`ChatTurnSettled`** (after commit, once per settled turn, `succeeded()`): the hook
+  for a "reply ready" notification. **`ChatTurnParking`**: runs before a parking turn's
+  approvals are published.
+- **Retry:** `POST threads/{id}/turns/{turnId}/retry` re-sends a failed, interrupted or
+  cancelled turn's original parts as a new turn (human, `write` access; queued behind a
+  running turn).
+- **A turn links to its message** (fancy-chat-js 068bbe3): `turn.started` carries
+  `messageId`; `TurnEntry.messageId` and the message's `turnId` are set. Fixture
+  `38c2c9b3...`. Snapshot turns gain `messageId`: a host comparing a turn array exactly
+  should compare with `messageId` included.
+
+### Fixed (impactium follow-ups)
+
+- **An approval was actionable before its turn parked.** A backend's approval was
+  published the moment it streamed, so a human could decide before the run (and the
+  evidence the host records about it) was durable. Backend approvals and questions are
+  now held until the turn parks, then published after `ChatTurnParking`.
+- **A decision made while the turn still ran was lost.** `resumeIfReady` returned early
+  for a running turn, and nothing resumed it after it parked. The turn now resumes on
+  its own once it parks (queue-and-resume), only on decisions made during that run.
+
 ### Added
 
 - **`GET threads/{id}/capabilities`** answers `{capabilities: {steering, cancel,

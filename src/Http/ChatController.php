@@ -94,6 +94,11 @@ final class ChatController
         });
     }
 
+    public function retry(Request $request, string $thread, string $turn): Response
+    {
+        return $this->guard(fn (): Response => $this->json(201, $this->chat->retry($request, $thread, $turn)));
+    }
+
     public function capabilities(Request $request, string $thread): Response
     {
         return $this->guard(fn (): Response => $this->json(200, ['capabilities' => $this->chat->capabilities($request, $thread)]));

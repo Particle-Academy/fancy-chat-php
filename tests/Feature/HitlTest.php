@@ -115,7 +115,7 @@ it('withdraws a parked approval when the turn is stopped', function (): void {
     expect($r['body'])->toBe(['outcome' => 'ok']);
     $state = chat()->snapshot('t_1');
     expect($state['approvals'][0]['state'])->toBe('withdrawn')
-        ->and($state['turns'][0])->toBe(['turnId' => $turnId, 'state' => 'settled', 'outcome' => 'cancelled', 'reason' => null]);
+        ->and($state['turns'][0])->toMatchArray(['turnId' => $turnId, 'state' => 'settled', 'outcome' => 'cancelled', 'reason' => null]);
     expect(http('POST', "/fancy-chat/approvals/{$approvalId}/decision", ['optionId' => 'yes'], 'human:u_1')['status'])->toBe(409);
 });
 

@@ -10,6 +10,7 @@ Route::get('threads/{thread}/events', [ChatController::class, 'stream'])->name('
 Route::get('threads/{thread}/events/poll', [ChatController::class, 'poll'])->name('fancy-chat.poll');
 Route::get('threads/{thread}/snapshot', [ChatController::class, 'snapshot'])->name('fancy-chat.snapshot');
 Route::get('threads/{thread}/capabilities', [ChatController::class, 'capabilities'])->name('fancy-chat.capabilities');
+Route::post('threads/{thread}/turns/{turn}/retry', [ChatController::class, 'retry'])->name('fancy-chat.retry');
 Route::post('threads/{thread}/cancel', [ChatController::class, 'cancel'])->name('fancy-chat.cancel');
 Route::delete('threads/{thread}/queue/{message}', [ChatController::class, 'unsend'])->name('fancy-chat.unsend');
 Route::post('approvals/{approval}/decision', [ChatController::class, 'decide'])->name('fancy-chat.decide');

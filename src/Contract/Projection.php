@@ -308,7 +308,12 @@ final class Projection
                     $illegal();
                     break;
                 }
-                $state['turns'][] = ['turnId' => $data['turnId'], 'state' => 'pending', 'outcome' => null, 'reason' => null];
+                // The message that started the turn, both ways (fancy-chat-js TurnEntry.messageId).
+                $origin = is_string($data['messageId'] ?? null) ? self::indexOf($state['messages'], 'id', $data['messageId']) : null;
+                $state['turns'][] = ['turnId' => $data['turnId'], 'state' => 'pending', 'outcome' => null, 'reason' => null, 'messageId' => $origin === null ? null : $state['messages'][$origin]['id']];
+                if ($origin !== null && $state['messages'][$origin]['turnId'] === null) {
+                    $state['messages'][$origin]['turnId'] = $data['turnId'];
+                }
                 break;
 
             case 'turn.transition':

@@ -19,6 +19,8 @@ use FancyChat\Contract\TypedApproval;
 use FancyChat\Contract\Undo;
 use FancyChat\Jobs\RunTurn;
 use FancyChat\Store\ThreadEventStore;
+use FancyChat\Events\ChatTurnParking;
+use FancyChat\Events\ChatTurnSettled;
 use Illuminate\Contracts\Bus\Dispatcher;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Container\Container;
@@ -52,6 +54,15 @@ final class FancyChat
     private ?Closure $accessResolver = null;
 
     private ?AgentBackend $backend = null;
+
+    /**
+     * Approvals and questions a backend raised in a running turn, held until the
+     * turn parks (keyed by turnId). Publishing them mid-run would let a human act
+     * before the run, and whatever the host records about it, is durable.
+     *
+     * @var array<string, list<array<string, mixed>>>
+     */
+    private array $heldHitl = [];
 
     private ?Closure $clock = null;
 
@@ -228,7 +239,13 @@ final class FancyChat
             throw new ChatException('event.size', 413);
         }
 
+        // A settle that changes nothing (a duplicate, or one the machine refuses) must
+        // not announce again: one ChatTurnSettled per turn.
+        $settledBefore = $event['type'] === 'turn.settled' && $this->turnIsSettled($threadId, $event['data']['turnId'] ?? null);
         $stored = $this->store->append($threadId, $event, $this->now());
+        if ($stored['type'] === 'turn.settled' && ! $settledBefore) {
+            $this->announceSettled($threadId, $stored);
+        }
 
         if ($stored['type'] === 'approval.requested') {
             $this->store->index($stored['data']['approval']['approvalId'], $threadId, 'approval', 'pending');
@@ -247,6 +264,29 @@ final class FancyChat
         $this->nudge($threadId, $stored['seq']);
 
         return $stored;
+    }
+
+    private function turnIsSettled(string $threadId, mixed $turnId): bool
+    {
+        if (! is_string($turnId)) {
+            return false;
+        }
+
+        return ($this->findRecord($this->snapshot($threadId), 'turns', 'turnId', $turnId)['state'] ?? null) === 'settled';
+    }
+
+    /** @param  array<string, mixed>  $stored */
+    private function announceSettled(string $threadId, array $stored): void
+    {
+        $turnId = $stored['data']['turnId'] ?? null;
+        if (! is_string($turnId)) {
+            return;
+        }
+        $turn = $this->findRecord($this->snapshot($threadId), 'turns', 'turnId', $turnId);
+        if ($turn === null || $turn['state'] !== 'settled' || ! is_string($turn['outcome'])) {
+            return;
+        }
+        $this->app->make('events')->dispatch(new ChatTurnSettled($threadId, $turnId, $turn['outcome'], is_string($turn['reason'] ?? null) ? $turn['reason'] : null));
     }
 
     private function nudge(string $threadId, int $seq): void
@@ -494,6 +534,49 @@ final class FancyChat
      * @param  array<string, mixed>  $body  parts, supersedes?
      * @return array{messageId: string, seq: int, delivery: string}
      */
+    /**
+     * Re-sends a failed, interrupted or cancelled turn's ORIGINAL message parts as a
+     * new turn (queued behind a running one, like any message). The parts come from
+     * the log through the turn's messageId, so it needs no client state.
+     *
+     * @return array{messageId: string, seq: int, delivery: string}
+     */
+    public function retry(Request $request, string $threadId, string $turnId): array
+    {
+        $actor = $this->resolveActor($request);
+        $this->authorize($request, $threadId, 'write');
+        $this->requireHuman($actor);
+        if ($this->backend === null) {
+            throw new ChatException('chat.backend', 503);
+        }
+        $state = $this->snapshot($threadId);
+        $turn = $this->findRecord($state, 'turns', 'turnId', $turnId) ?? throw new ChatException('turn.unknown', 404);
+        if ($turn['state'] !== 'settled' || ! in_array($turn['outcome'], ['failed', 'interrupted', 'cancelled'], true)) {
+            throw new ChatException('turn.state', 409);
+        }
+        $origin = is_string($turn['messageId'] ?? null) ? $this->findRecord($state, 'messages', 'id', $turn['messageId']) : null;
+        if ($origin === null || $origin['parts'] === []) {
+            throw new ChatException('turn.no-message', 422);
+        }
+
+        $messageId = 'm_'.bin2hex(random_bytes(8));
+        $message = ['id' => $messageId, 'role' => 'user', 'parts' => $origin['parts'], 'delivery' => 'sent'];
+        if ($this->activeTurn($state) !== null) {
+            $queued = count(array_filter($state['messages'], fn (array $m): bool => $m['delivery'] === 'queued'));
+            if ($queued >= (int) $this->cfg('limits.queue_length', 20)) {
+                throw new ChatException('queue.full', 429);
+            }
+            $created = $this->append($threadId, ['type' => 'message.created', 'actor' => $actor, 'data' => ['message' => $message]]);
+            $this->append($threadId, ['type' => 'delivery.changed', 'data' => ['messageId' => $messageId, 'action' => 'queue']]);
+
+            return ['messageId' => $messageId, 'seq' => $created['seq'], 'delivery' => 'queued'];
+        }
+        $created = $this->append($threadId, ['type' => 'message.created', 'actor' => $actor, 'data' => ['message' => $message]]);
+        $this->startTurn($threadId, $messageId, $origin['parts']);
+
+        return ['messageId' => $messageId, 'seq' => $created['seq'], 'delivery' => 'sent'];
+    }
+
     public function send(Request $request, string $threadId, array $body): array
     {
         $actor = $this->resolveActor($request);
@@ -808,7 +891,7 @@ final class FancyChat
     private function startTurn(string $threadId, string $messageId, array $parts): string
     {
         $turnId = 'u_'.bin2hex(random_bytes(8));
-        $this->append($threadId, ['type' => 'turn.started', 'turnId' => $turnId, 'data' => ['turnId' => $turnId]]);
+        $this->append($threadId, ['type' => 'turn.started', 'turnId' => $turnId, 'data' => ['turnId' => $turnId, 'messageId' => $messageId]]);
         $this->dispatch(new TurnInput($threadId, $turnId, 'message', $messageId, $parts));
 
         return $turnId;
@@ -856,6 +939,9 @@ final class FancyChat
             return;
         }
 
+        // What this turn had decided before the run, so a park resumes only on a
+        // decision made DURING it (queue-and-resume), never re-delivers an old one.
+        $decidedBefore = $this->decidedIds($state, $turnId);
         $current = 'running';
         try {
             foreach ($this->backend->start($input) as $raw) {
@@ -877,8 +963,68 @@ final class FancyChat
             }
         }
 
+        // A turn that ended without parking never publishes what it held: there is no
+        // run left to resume, so an approval of it could only mislead.
+        foreach ($this->heldHitl[$turnId] ?? [] as $held) {
+            $this->append($threadId, ['type' => 'x-fancy-chat.refused', 'turnId' => $turnId, 'data' => ['type' => $held['type'], 'error' => $held['type'] === 'approval.requested' ? 'approval.unparked' : 'question.unparked']]);
+        }
+        unset($this->heldHitl[$turnId]);
+
+        if ($current === 'awaiting-human') {
+            // Queue-and-resume: a decision recorded while the turn was still running
+            // (on an approval the host appended itself) resumes it now that it parked.
+            $this->resumeParkedIfDecided($threadId, $turnId, $decidedBefore);
+        }
         if ($current === 'settled') {
             $this->dequeueNext($threadId);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     * @return list<string> the approval and question ids of the turn a human has decided or answered
+     */
+    private function decidedIds(array $state, string $turnId): array
+    {
+        $ids = [];
+        foreach ($state['approvals'] as $a) {
+            if (($a['turnId'] ?? null) === $turnId && in_array($a['state'], self::DECIDED_APPROVAL, true)) {
+                $ids[] = $a['approvalId'];
+            }
+        }
+        foreach ($state['questions'] as $q) {
+            if (($q['turnId'] ?? null) === $turnId && $q['state'] === 'answered') {
+                $ids[] = $q['questionId'];
+            }
+        }
+
+        return $ids;
+    }
+
+    /** @param  list<string>  $decidedBefore */
+    private function resumeParkedIfDecided(string $threadId, string $turnId, array $decidedBefore): void
+    {
+        $state = $this->snapshot($threadId);
+        // Nothing new decided during the run: the turn waits for a human, whatever
+        // was decided before (a backend that parks again must not loop on old decisions).
+        if (array_diff($this->decidedIds($state, $turnId), $decidedBefore) === []) {
+            return;
+        }
+        $approval = null;
+        foreach ($state['approvals'] as $a) {
+            if (($a['turnId'] ?? null) === $turnId && in_array($a['state'], self::DECIDED_APPROVAL, true)) {
+                $approval = $a;
+            }
+        }
+        $question = null;
+        foreach ($state['questions'] as $q) {
+            if (($q['turnId'] ?? null) === $turnId && $q['state'] === 'answered') {
+                $question = $q;
+            }
+        }
+        // Only a decision that exists: a turn parked on nothing decided waits for a human.
+        if ($approval !== null || $question !== null) {
+            $this->resumeIfReady($threadId, $turnId, $approval, $question);
         }
     }
 
@@ -984,6 +1130,15 @@ final class FancyChat
                 $event[$key] = $raw[$key];
             }
         }
+        if ($type === 'approval.requested' || $type === 'question.asked') {
+            // Held, not published: see $heldHitl. Published with the park.
+            $this->heldHitl[$turnId][] = $event;
+
+            return;
+        }
+        if ($type === 'turn.transition' && ($data['action'] ?? null) === 'park') {
+            $this->publishHeld($threadId, $turnId, $refuse);
+        }
         try {
             $this->appendAs($threadId, $event, 'agent');
         } catch (ChatException $e) {
@@ -993,6 +1148,30 @@ final class FancyChat
         }
         if ($type === 'turn.transition' || $type === 'turn.settled') {
             $current = Machines::turn($current, $data['action'])['to'] ?? $current;
+        }
+    }
+
+    /**
+     * Publishes what a parking turn held: ChatTurnParking first (the host records
+     * evidence), then each record, through the same checks as any append.
+     *
+     * @param  Closure(string, mixed=): void  $refuse
+     */
+    private function publishHeld(string $threadId, string $turnId, Closure $refuse): void
+    {
+        $held = $this->heldHitl[$turnId] ?? [];
+        unset($this->heldHitl[$turnId]);
+        if ($held === []) {
+            return;
+        }
+        $ids = array_map(fn (array $e): string => (string) ($e['type'] === 'approval.requested' ? ($e['data']['approval']['approvalId'] ?? '') : ($e['data']['question']['questionId'] ?? '')), $held);
+        $this->app->make('events')->dispatch(new ChatTurnParking($threadId, $turnId, $ids));
+        foreach ($held as $event) {
+            try {
+                $this->appendAs($threadId, $event, 'agent');
+            } catch (ChatException $e) {
+                $refuse($e->error, $event['type']);
+            }
         }
     }
 

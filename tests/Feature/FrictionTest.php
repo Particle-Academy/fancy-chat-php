@@ -184,6 +184,7 @@ it('a backend\'s approval preview is still checked as AGENT parts: it cannot pla
             'preview' => [['id' => 'pv', 'kind' => 'approval', 'approvalId' => 'ap_other']],
             'options' => [['id' => 'yes', 'kind' => 'allow-once', 'label' => 'Yes']],
         ]]];
+        yield ['type' => 'turn.transition', 'data' => ['action' => 'park']];
     }));
     http('POST', '/fancy-chat/threads/t_1/messages', textMessage('x'), 'human:u_1');
     $refused = collect(chat()->store()->after('t_1', 0, 50))->firstWhere('type', 'x-fancy-chat.refused');

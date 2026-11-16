@@ -62,6 +62,7 @@ Mounted under `fancy-chat` (configurable, or off with `fancy-chat.routes`):
 | `GET threads/{id}/events/poll?after=&wait=` | Long-poll: `{events, next}`. |
 | `GET threads/{id}/snapshot?at=` | 200 `{snapshot, seq, capabilities}`: `snapshot` is the projected state (fancy-chat-js `ThreadState`: `lastSeq`, `order`, `messages`, `turns`, `thinking`, `tools`, `plans`, `approvals`, `questions`, `undos`, `branches`) at `at` (default: now); `seq` is its `lastSeq`; `capabilities` as below. `410 snapshot.gone` before the retained window, `422 snapshot.at` past the end. |
 | `GET threads/{id}/capabilities` | 200 `{capabilities: {steering, cancel, approvals}}`, the backend's, as booleans (all false without one). A UI hides Stop when `cancel` is false. |
+| `POST threads/{id}/turns/{turnId}/retry` | A human (with `write` access) retries a failed, interrupted or cancelled turn: its ORIGINAL message parts are re-sent as a new turn, found through the turn's `messageId`, so it works after a reload. Answers **201** `{messageId, seq, delivery}` (`queued` behind a running turn). `409 turn.state` for a turn that did not fail, `404 turn.unknown`, `422 turn.no-message`. |
 | `POST threads/{id}/cancel` | `{mode: stop or interrupt}`. Returns `{outcome}`: `ok`, `not-running`, `no-turn`, `unsupported`, `refused`, `uncertain`. A stop withdraws the turn's parked approvals. |
 | `DELETE threads/{id}/queue/{messageId}` | The author unsends a queued message. |
 | `POST approvals/{id}/decision` | `{optionId, note?, edited?}`. Human actors only. |
@@ -130,6 +131,33 @@ them runs, once, even when they race. A throw leaves the window open.
 message. The projection records the superseded branch in `branches`.
 `edit_resend.policy` decides its fate: `branch` (the default) keeps it;
 `truncate` retracts its messages and withdraws its pending approvals.
+
+## Events for the host
+
+- **`FancyChat\Events\ChatTurnSettled`** `{threadId, turnId, outcome, reason}`, with
+  `succeeded()` (outcome `completed`). Fired once per settled turn, on every path that
+  settles one, and only after the surrounding transaction commits
+  (`ShouldDispatchAfterCommit`). This is the hook for a "reply ready" notification;
+  a park is not a settle and never fires it.
+- **`FancyChat\Events\ChatTurnParking`** `{threadId, turnId, hitlIds}`. Fired
+  synchronously when a turn parks, BEFORE its approvals and questions are published,
+  so evidence a listener records exists before any human can act. A listener that
+  throws fails the turn and nothing is published.
+
+## Approvals become actionable when the turn parks
+
+An `approval.requested` or `question.asked` a BACKEND emits is held, not published,
+until that turn parks (its stream exhausted: for Prism Harness, after the run and the
+host's recorders have persisted it). Then `ChatTurnParking` fires, the records are
+published and indexed, and the park is appended, in that order. Before then the
+approval is invisible and a decision on it is `404 approval.unknown`. A turn that ends
+without parking never publishes what it held (`x-fancy-chat.refused`
+`approval.unparked`).
+
+**Queue-and-resume.** A decision recorded while its turn is still running (on an
+approval the host appended itself, or in the instant between publishing and the park)
+is kept, and the turn resumes on its own the moment it parks. A park resumes only on
+decisions made during that run, so a backend that parks again with nothing new waits.
 
 ## Backends
 
