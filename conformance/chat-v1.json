@@ -507,6 +507,18 @@
             { "kind": "approval", "id": "ap_1", "approvalId": "ap_1", "state": "approved" }
           ]
         }
+      },
+      {
+        "name": "a malformed plan step is counted illegal, never thrown on, and the cursor moves past it",
+        "events": [
+          { "seq": 1, "type": "plan.updated", "runId": "r_1", "data": { "steps": [null] } },
+          { "seq": 2, "type": "plan.updated", "runId": "r_1", "data": { "steps": ["x", 5] } },
+          { "seq": 3, "type": "turn.started", "actor": { "kind": "system", "id": "server" }, "data": { "turnId": "u_1" } }
+        ],
+        "expect": {
+          "lastSeq": 3, "illegal": 2, "turns": [{ "turnId": "u_1", "state": "pending", "outcome": null, "reason": null, "messageId": null }], "approvals": [], "questions": [],
+          "rows": []
+        }
       }
     ]
   },
@@ -560,7 +572,9 @@
       { "name": "swapping the approval id does not release it", "prev": [{ "id": "s", "title": "Pay", "status": "held", "owner": "human", "approvalId": "ap_wait" }], "next": [{ "id": "s", "title": "Pay", "status": "running", "owner": "human", "approvalId": "ap_ok" }], "ok": false, "error": "plan.held" },
       { "name": "dropping a held step releases nothing", "prev": [{ "id": "s", "title": "Pay", "status": "held", "owner": "human", "approvalId": "ap_wait" }], "next": [], "ok": false, "error": "plan.held" },
       { "name": "a step may become held, and staying held is fine", "prev": [{ "id": "s", "title": "Pay", "status": "pending", "owner": "agent" }], "next": [{ "id": "s", "title": "Pay", "status": "held", "owner": "human", "approvalId": "ap_wait" }], "ok": true, "error": null },
-      { "name": "an unknown status is refused", "prev": [], "next": [{ "id": "s", "title": "Pay", "status": "paused", "owner": "agent" }], "ok": false, "error": "plan.step" }
+      { "name": "an unknown status is refused", "prev": [], "next": [{ "id": "s", "title": "Pay", "status": "paused", "owner": "agent" }], "ok": false, "error": "plan.step" },
+      { "name": "a null step is refused, never thrown on", "prev": [], "next": [null], "ok": false, "error": "plan.step" },
+      { "name": "a step that is not an object is refused", "prev": [], "next": ["x", 5], "ok": false, "error": "plan.step" }
     ]
   },
   "branchTurns": {

@@ -8,6 +8,18 @@ version number is not a stability promise until 1.0; read the entry.
 
 ## [Unreleased]
 
+### Changed
+
+- **Conformance fixture re-vendored from fancy-chat-js, with three new cases.** A
+  `plan.updated` with a null or non-object step is refused (`plan.step`), counted
+  illegal, and the cursor moves past it. fancy-chat-js threw on the null step; this
+  package already refused it, and passes the new cases with no code change. The
+  pinned SHA-256 is now
+  `295439897db175e8040f4a48effd5f55a18817aac342d2d39335dc030c39040b`. A new
+  totality test feeds every core event type malformed shapes and checks
+  `Projection::apply` never throws. It passes on 0.1.0 too, so it is coverage, not
+  a fix. Nothing to do.
+
 ## [0.1.0] - 2026-11-15
 
 ### Added (impactium follow-ups)
