@@ -8,6 +8,10 @@ version number is not a stability promise until 1.0; read the entry.
 
 ## [Unreleased]
 
+### Changed
+
+- **Docs:** `AGENTS.md` is now the guide to using this package (install, its entries on the Fancy MCP catalog server, API essentials, traps). The contributor notes moved to `CONTRIBUTING.md`, and `CLAUDE.md` is now a symlink to it. The README points to the MCP server and to `AGENTS.md`. No code changed; nothing to do.
+
 ## [0.2.0] - 2026-11-16
 
 **Read this first: fancy-chat-php is now built on Prism, and it absorbs
