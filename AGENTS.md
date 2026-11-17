@@ -18,10 +18,11 @@ come with it. The knowledge explorer is optional:
 ## Find it on the Fancy MCP server
 
 The catalog server is `https://ui.particle.academy/mcp` (streamable HTTP, no API
-key; MCP id `fancy-ui`). This package is not yet listed there; it appears once
-published. Find it then with `search-backend-packages` (stack `php`). Its browser
+key; MCP id `fancy-ui`). This package is listed there: find it with
+`search-backend-packages` (stack `php`). Its browser
 side is `@particle-academy/fancy-chat-js` (the wire contract) and
-`@particle-academy/fancy-chat-ui` (the React surfaces).
+`@particle-academy/fancy-chat-ui` (the React surfaces):
+`npm i @particle-academy/fancy-chat-js @particle-academy/fancy-chat-ui`.
 
 ## API essentials
 
