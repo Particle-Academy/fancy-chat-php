@@ -10,6 +10,8 @@ version number is not a stability promise until 1.0; read the entry.
 
 ### Changed
 
+- **BREAKING:** Laravel 13 is the minimum; an app on Laravel 12 or older can no longer install this; upgrade Laravel. On Laravel 13, do nothing.
+- Requires `laravel/framework` `^13.0`, because `src/` uses `Illuminate\Foundation`, which ships only in the framework. It moved from `require-dev` (where it was `^13.30`) to `require`.
 - **Docs:** `AGENTS.md` is now the guide to using this package (install, how to find it on the Fancy MCP catalog server once it is listed, API essentials, traps). The contributor notes it held moved to `CONTRIBUTING.md`, and `CLAUDE.md` is now a symlink to it. The README points to the MCP server and to `AGENTS.md`. No code changed; nothing to do.
 - **Docs:** the package is now listed on the Fancy MCP catalog server, so the README's MCP note and `AGENTS.md` say so, and `AGENTS.md` gives the browser-side install (`npm i @particle-academy/fancy-chat-js @particle-academy/fancy-chat-ui`). No code changed; nothing to do.
 - CI: re-pin org third-party allowlist to 2614224

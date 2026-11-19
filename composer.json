@@ -43,11 +43,11 @@
         "illuminate/queue": "^13.0",
         "illuminate/routing": "^13.0",
         "illuminate/support": "^13.0",
+        "laravel/framework": "^13.0",
         "particle-academy/prism": ">=0.143 <2.0",
         "particle-academy/prism-harness": ">=0.26 <2.0"
     },
     "require-dev": {
-        "laravel/framework": "^13.30",
         "particle-academy/prism-graph": "^0.4",
         "pestphp/pest": "^5.0"
     },
