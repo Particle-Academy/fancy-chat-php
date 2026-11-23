@@ -24,7 +24,7 @@ v1. prism-graph is optional (`src/Prism/KnowledgeBridge.php`, `available()`).
 | `src/FancyChat.php` | The manager: host binding, append, snapshot, poll, SSE, send, runTurn, decide, answer, cancel, unsend, reap. |
 | `src/Http/ChatController.php` | Thin HTTP. Every JSON body goes through `Json::encode`. |
 | `src/Jobs/RunTurn.php` | The queued turn. |
-| `src/Prism/` | `HarnessBackend` (RunStep g282.1 mapping, approvals, cancel, attachments) and the optional `KnowledgeBridge` (prism-graph >=0.4). Folded in from fancy-chat-prism-php in 0.2.0, same class names. |
+| `src/Prism/` | `HarnessBackend` (RunStep g282.1 mapping, approvals, cancel, attachments) and the optional `KnowledgeBridge` (prism-graph >=0.4) with its `KnowledgeController` (the cacheable route actions). Folded in from fancy-chat-prism-php in 0.2.0, same class names. |
 | `tests/Harness/` | The Harness suite, namespaced `FancyChat\Tests\Harness` (its helpers in `helpers.php`), with `Support/FakeSession` (a real Session subclass yielding real RunSteps) and the real-Harness integration tests on Prism's fake model. |
 | `tests/sabotage.php`, `tests/sabotage-prism.php` | One mutation at a time; every one must turn the suite red. A new clause in `src/Prism/` gets a mutation in `sabotage-prism.php`. |
 | `src/Undoable.php`, `src/Console/CommitUndoCommand.php` | Undo windows: the host's commit/revert, and the committer. |
@@ -86,6 +86,12 @@ v1. prism-graph is optional (`src/Prism/KnowledgeBridge.php`, `available()`).
     server recorded; a withheld one is named by label, never by ref.
 21. **`sourceTitle` comes from `getSource`**, one scoped call per distinct source,
     never a listing walk and never the store.
+22. **No route action captures an object.** The knowledge routes are
+    `KnowledgeController` methods that resolve the ONE container-bound
+    `KnowledgeBridge` per request, so `route:cache` serialises them
+    (`tests/Harness/Feature/KnowledgeRouteCacheTest.php` caches, reloads and
+    replays them). A new knowledge route is a controller method plus a `serve()` arm,
+    never a closure.
 
 ## Known limits
 

@@ -39,7 +39,10 @@ side is `@particle-academy/fancy-chat-js` (the wire contract) and
   retry, cancel, unsend, approval decision, question answer, undo revert. The full
   table is in the README.
 - **Knowledge (optional):** `KnowledgeBridge::routes(new KnowledgeBridge(scope: ...), prefix, middleware)`;
-  `KnowledgeBridge::available()` says whether prism-graph is installed.
+  `KnowledgeBridge::available()` says whether prism-graph is installed. The routes are
+  `KnowledgeController` actions that resolve `KnowledgeBridge` from the container, so
+  `route:cache` works once the bridge is bound in a service provider; then mount with
+  `KnowledgeBridge::routes(prefix: ..., middleware: [...])` and no bridge.
 - **Every limit** lives in `config/fancy-chat.php`.
 
 ## Traps
@@ -54,4 +57,10 @@ side is `@particle-academy/fancy-chat-js` (the wire contract) and
   `typed_approval.phrases`.
 - `KnowledgeBridge::routes()` throws a `LogicException` when prism-graph is not
   installed.
+- **With `php artisan route:cache`, bind `KnowledgeBridge` in a service provider.**
+  A cached app never runs its routes file, so `routes(new KnowledgeBridge(...))`
+  binds nothing there, and every knowledge request throws a `LogicException` saying
+  the bridge is not bound. Without route caching, nothing changes.
+- **One bridge per app.** Every knowledge route serves the bound bridge, so mounting
+  a second, different `KnowledgeBridge` throws instead of serving the first one's scope.
 - `tests/e2e/serve.php` is for driving a client in tests. Not for production.

@@ -346,6 +346,25 @@ KnowledgeBridge::routes(new KnowledgeBridge(
 ), 'fancy-chat/knowledge', ['web', 'auth']);
 ```
 
+**With `php artisan route:cache`, bind the bridge in a service provider.** The routes
+are `FancyChat\Prism\KnowledgeController` actions that resolve `KnowledgeBridge` from
+the container per request, so they cache. But a cached app never runs its routes file,
+so the `new KnowledgeBridge(...)` above would never be bound. Bind it in a provider's
+`register()` and mount with no bridge:
+
+```php
+// AppServiceProvider::register()
+$this->app->singleton(KnowledgeBridge::class, fn () => new KnowledgeBridge(scope: ..., decider: ...));
+
+// routes/web.php
+KnowledgeBridge::routes(prefix: 'fancy-chat/knowledge', middleware: ['web', 'auth']);
+```
+
+Without a binding a cached route throws a `LogicException` saying so. If you do not
+cache routes, nothing changes: `routes(new KnowledgeBridge(...))` binds the bridge it
+is given. Every knowledge route serves the ONE bound bridge, so mounting a second,
+different bridge throws rather than silently serving the first one's scope.
+
 | Route (GET unless noted) | Explorer method | Answers |
 |---|---|---|
 | `search?q=&limit=` | `search` | g282.1 chunk listing; each hit hydrated to a full chunk item (uri, sha256, writer, recordedAt, position) plus `score` and `method` |

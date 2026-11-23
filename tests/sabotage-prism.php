@@ -147,6 +147,12 @@ $mutations = [
     ['kb: label from the wrong field', 'src/Prism/KnowledgeBridge.php', "is_string(\$found['title'] ?? null) ? \$found['title'] : null", "is_string(\$found['sourceId'] ?? null) ? \$found['sourceId'] : null"],
     ['kb: prism-graph always available', 'src/Prism/KnowledgeBridge.php', "        return class_exists(ScopedGraph::class) && method_exists(ScopedGraph::class, 'getSource');", '        return true;'],
     ['kb: routes mount without prism-graph', 'src/Prism/KnowledgeBridge.php', "        if (! self::available()) {\n            throw new LogicException(", "        if (false) {\n            throw new LogicException("],
+
+    // route:cache: the controller resolves ONE bridge from the container.
+    ['kb: passed bridge never bound', 'src/Prism/KnowledgeBridge.php', '            $container->instance(self::class, $bridge);', ''],
+    ['kb: a second bridge mounts over the first', 'src/Prism/KnowledgeBridge.php', '        } elseif ($container->make(self::class) !== $bridge) {', '        } elseif (false) {'],
+    ['kb: unbound controller fails unclearly', 'src/Prism/KnowledgeController.php', '        if (! $this->container->bound(KnowledgeBridge::class)) {', '        if (false) {'],
+    ['kb: decisions served with no decider', 'src/Prism/KnowledgeBridge.php', '$this->decider === null ? throw new NotFoundHttpException : ', ''],
 ];
 
 $failed = [];

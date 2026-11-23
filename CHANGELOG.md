@@ -8,6 +8,14 @@ version number is not a stability promise until 1.0; read the entry.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`php artisan route:cache` no longer fails with "Serialization of 'Closure' is not allowed"** when the knowledge routes are mounted. Every `KnowledgeBridge::routes()` route (search, sources, a source's chunks, chunks, facts, facts/timeline, facts/all, ingest/jobs, ingest/worker, and POST facts/{fact}/accept and reject) was a closure holding the bridge and the host's scope closure. They are now `FancyChat\Prism\KnowledgeController` actions that resolve `KnowledgeBridge` from the container per request. URLs, methods, middleware and responses are unchanged. **What to do:** to use `route:cache`, bind `KnowledgeBridge` in a service provider (a cached app never runs its routes file) and call `KnowledgeBridge::routes(prefix: ..., middleware: [...])` with no bridge; a cached route with nothing bound throws a `LogicException` saying so. If you don't cache routes, do nothing: `routes(new KnowledgeBridge(...))` binds the bridge it is given.
+
+### Changed
+
+- `KnowledgeBridge::routes()`'s bridge argument is now optional (the container's binding is used), and mounting a second, different bridge throws a `LogicException`: every route serves the ONE bound bridge, so it would otherwise have served the first one's scope. One bridge per app was already the only tested shape; if you mounted two, bind one. New public `KnowledgeBridge::serve()`, the entry point the controller calls.
+
 ## [0.3.0] - 2026-11-19
 
 ### Changed

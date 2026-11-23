@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FancyChat\Prism;
 
 use Closure;
+use Illuminate\Container\Container;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -15,6 +16,7 @@ use Prism\Graph\Exceptions\GraphException;
 use Prism\Graph\Fact;
 use Prism\Graph\Hit;
 use Prism\Graph\ScopedGraph;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Throwable;
 
 /**
@@ -61,29 +63,72 @@ final class KnowledgeBridge
         return class_exists(ScopedGraph::class) && method_exists(ScopedGraph::class, 'getSource');
     }
 
-    /** Mounts the routes under `$prefix` (default `fancy-chat/knowledge`) with the host's middleware. */
-    public static function routes(self $bridge, string $prefix = 'fancy-chat/knowledge', array $middleware = []): void
+    /**
+     * Mounts the routes under `$prefix` (default `fancy-chat/knowledge`) with the host's middleware.
+     *
+     * Every action is a `KnowledgeController` method that resolves this class from the
+     * container per request, so the routes survive `route:cache`. A passed bridge is bound
+     * as the container's instance when nothing is bound yet (uncached hosts need nothing
+     * else); with no bridge passed, the bound one is used. With route:cache the routes file
+     * does not run, so the host must bind the bridge in a service provider.
+     */
+    public static function routes(?self $bridge = null, string $prefix = 'fancy-chat/knowledge', array $middleware = []): void
     {
         if (! self::available()) {
             throw new LogicException(self::class.' needs particle-academy/prism-graph >=0.4: composer require particle-academy/prism-graph');
         }
+        $container = Container::getInstance();
+        if ($bridge === null) {
+            if (! $container->bound(self::class)) {
+                throw new LogicException(KnowledgeController::UNBOUND);
+            }
+            $bridge = $container->make(self::class);
+        } elseif (! $container->bound(self::class)) {
+            $container->instance(self::class, $bridge);
+        } elseif ($container->make(self::class) !== $bridge) {
+            // Every route resolves ONE bridge, and with it one scope: serving another
+            // mount's scope silently would be worse than refusing.
+            throw new LogicException('Cannot mount '.self::class.': a different KnowledgeBridge is already bound in the container, and every knowledge route serves the bound one. Bind one bridge, then call KnowledgeBridge::routes() with no bridge (or with that same instance).');
+        }
         Route::prefix($prefix)->middleware($middleware)->group(function () use ($bridge): void {
-            Route::get('search', fn (Request $r) => $bridge->respond($r, fn (ScopedGraph $g) => $bridge->search($g, (string) $r->query('q', ''), (int) $r->query('limit', 10))));
-            Route::get('sources', fn (Request $r) => $bridge->respond($r, fn (ScopedGraph $g) => $g->listSources(self::cursor($r), self::limit($r))));
-            Route::get('sources/{source}/chunks', fn (Request $r, string $source) => $bridge->respond($r, fn (ScopedGraph $g) => $bridge->titledListing($g, $g->listChunks($source, self::cursor($r), self::limit($r)))));
-            Route::get('chunks', fn (Request $r) => $bridge->respond($r, fn (ScopedGraph $g) => $bridge->chunks($g, self::ids($r, $bridge->maxIds))));
-            Route::get('facts', fn (Request $r) => $bridge->respond($r, fn (ScopedGraph $g) => $bridge->facts($g, self::subject($r), $r->boolean('unaccepted'))));
-            Route::get('facts/timeline', fn (Request $r) => $bridge->respond($r, fn (ScopedGraph $g) => $bridge->timeline($g, self::subject($r))));
+            Route::get('search', [KnowledgeController::class, 'search']);
+            Route::get('sources', [KnowledgeController::class, 'sources']);
+            Route::get('sources/{source}/chunks', [KnowledgeController::class, 'sourceChunks']);
+            Route::get('chunks', [KnowledgeController::class, 'chunks']);
+            Route::get('facts', [KnowledgeController::class, 'facts']);
+            Route::get('facts/timeline', [KnowledgeController::class, 'timeline']);
             // Shipped by prism-graph later (G-282 C, and the g282.2 fact listing): served
             // as-is once ScopedGraph has the method, 501 until then.
-            Route::get('facts/all', fn (Request $r) => $bridge->respond($r, fn (ScopedGraph $g) => $bridge->later($g, 'listFacts', [self::optionalSubject($r), self::cursor($r), self::limit($r)])));
-            Route::get('ingest/jobs', fn (Request $r) => $bridge->respond($r, fn (ScopedGraph $g) => $bridge->later($g, 'ingestJobs', [self::cursor($r), self::limit($r)])));
-            Route::get('ingest/worker', fn (Request $r) => $bridge->respond($r, fn (ScopedGraph $g) => $bridge->later($g, 'workerStatus', [])));
+            Route::get('facts/all', [KnowledgeController::class, 'allFacts']);
+            Route::get('ingest/jobs', [KnowledgeController::class, 'ingestJobs']);
+            Route::get('ingest/worker', [KnowledgeController::class, 'ingestWorker']);
             if ($bridge->decider !== null) {
-                Route::post('facts/{fact}/accept', fn (Request $r, string $fact) => $bridge->decide($r, $fact, 'accept'));
-                Route::post('facts/{fact}/reject', fn (Request $r, string $fact) => $bridge->decide($r, $fact, 'reject'));
+                Route::post('facts/{fact}/accept', [KnowledgeController::class, 'accept']);
+                Route::post('facts/{fact}/reject', [KnowledgeController::class, 'reject']);
             }
         });
+    }
+
+    /**
+     * One knowledge endpoint, as `KnowledgeController` calls it. `$param` is the route's
+     * `{source}` or `{fact}`. Accept and reject are 404 on a bridge with no `decider`,
+     * the same as the route not being mounted.
+     */
+    public function serve(string $endpoint, Request $r, ?string $param = null): JsonResponse
+    {
+        return match ($endpoint) {
+            'search' => $this->respond($r, fn (ScopedGraph $g) => $this->search($g, (string) $r->query('q', ''), (int) $r->query('limit', 10))),
+            'sources' => $this->respond($r, fn (ScopedGraph $g) => $g->listSources(self::cursor($r), self::limit($r))),
+            'sourceChunks' => $this->respond($r, fn (ScopedGraph $g) => $this->titledListing($g, $g->listChunks((string) $param, self::cursor($r), self::limit($r)))),
+            'chunks' => $this->respond($r, fn (ScopedGraph $g) => $this->chunks($g, self::ids($r, $this->maxIds))),
+            'facts' => $this->respond($r, fn (ScopedGraph $g) => $this->facts($g, self::subject($r), $r->boolean('unaccepted'))),
+            'timeline' => $this->respond($r, fn (ScopedGraph $g) => $this->timeline($g, self::subject($r))),
+            'allFacts' => $this->respond($r, fn (ScopedGraph $g) => $this->later($g, 'listFacts', [self::optionalSubject($r), self::cursor($r), self::limit($r)])),
+            'ingestJobs' => $this->respond($r, fn (ScopedGraph $g) => $this->later($g, 'ingestJobs', [self::cursor($r), self::limit($r)])),
+            'ingestWorker' => $this->respond($r, fn (ScopedGraph $g) => $this->later($g, 'workerStatus', [])),
+            'accept', 'reject' => $this->decider === null ? throw new NotFoundHttpException : $this->decide($r, (string) $param, $endpoint),
+            default => throw new InvalidArgumentException("Unknown knowledge endpoint: {$endpoint}"),
+        };
     }
 
     /** @return array{contractVersion: string, items: list<array<string, mixed>>, nextCursor: null} */
