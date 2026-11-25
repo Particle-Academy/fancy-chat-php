@@ -23,6 +23,7 @@ final class Envelope
         'question.asked', 'question.answered',
         'undo.opened', 'undo.committed', 'undo.reverted',
         'agent.status', 'usage', 'provider.fallback', 'control.handoff',
+        'suggestions.updated',
     ];
 
     private const string EXTENSION = '/^x-[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9._-]*$/';

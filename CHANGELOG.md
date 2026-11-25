@@ -8,6 +8,39 @@ version number is not a stability promise until 1.0; read the entry.
 
 ## [Unreleased]
 
+### Added
+
+- **Quick replies (CC-fancy-0065), off by default.** After a turn settles
+  `completed`, the server can generate a few short plain-text next messages from
+  the user's message and the agent's reply, and append them as `suggestions.updated`
+  (fancy-chat-js contract); the snapshot carries `suggestions`
+  (`{ turnId, items: [{ id, text }] } | null`), cleared when the next turn starts.
+  - Switched on per Harness mode: `fancy-chat.suggestions.enabled` and
+    `fancy-chat.suggestions.modes`. New limits, each an app setting with a safe
+    default: `max_count` (3), `max_chars` (80), `max_input_chars` (4000),
+    `max_output_tokens` (256), `timeout_seconds` (15); `provider` / `model`
+    (null: the agent's own).
+  - `HarnessBackend` generates with ONE plain Prism text call on the host's model:
+    no tools, no session history, nothing written to the agent's conversation. Its
+    two inputs go in a `<conversation_data>` block as JSON with `<` and `>` escaped,
+    so no input can close the block, and the system prompt says the block is data,
+    never instructions.
+  - Never for a turn that parked, failed, was refused or cancelled. Runs as its own
+    job, `FancyChat\Jobs\GenerateSuggestions`, after the turn settled and the next
+    queued turn was dispatched, so it cannot delay either; replies made stale by a
+    newer turn are dropped. An error goes to the host's exception handler and
+    appends nothing.
+  - The output is sanitised by `FancyChat\Contract\Suggestions::sanitize`, the port
+    of fancy-chat-js `sanitizeSuggestions`, held to it by the shared fixture: plain
+    text, bounded count and length, and no typed-approval phrase (the English set
+    and every configured one), so a pick can never read as a decision.
+  - New seam: `FancyChat\Backend\SuggestsReplies` (`replyMode`, `suggestReplies`)
+    and `FancyChat\Backend\SuggestionRequest`. A backend may not emit
+    `suggestions.updated` itself; it is refused as `backend.type`.
+  - **What to do:** nothing; it is off. To use it, set `suggestions.enabled` and
+    list the modes, and know each settled turn costs one more model call. The
+    vendored `conformance/chat-v1.json` is re-pinned with fancy-chat-js.
+
 ## [0.4.0] - 2026-11-23
 
 ### Fixed

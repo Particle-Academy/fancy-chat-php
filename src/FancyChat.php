@@ -7,6 +7,8 @@ namespace FancyChat;
 use Closure;
 use FancyChat\Backend\AgentBackend;
 use FancyChat\Backend\CancelOutcome;
+use FancyChat\Backend\SuggestionRequest;
+use FancyChat\Backend\SuggestsReplies;
 use FancyChat\Backend\TurnInput;
 use FancyChat\Contract\Envelope;
 use FancyChat\Contract\Hitl;
@@ -15,8 +17,10 @@ use FancyChat\Contract\Machines;
 use FancyChat\Contract\Parts;
 use FancyChat\Contract\Plan;
 use FancyChat\Contract\Projection;
+use FancyChat\Contract\Suggestions;
 use FancyChat\Contract\TypedApproval;
 use FancyChat\Contract\Undo;
+use FancyChat\Jobs\GenerateSuggestions;
 use FancyChat\Jobs\RunTurn;
 use FancyChat\Store\ThreadEventStore;
 use FancyChat\Events\ChatTurnParking;
@@ -47,6 +51,8 @@ final class FancyChat
     private const array BACKEND_FORBIDDEN = [
         'thread.snapshot', 'thread.reset', 'turn.started', 'delivery.changed',
         'approval.decided', 'approval.applied', 'approval.withdrawn', 'question.answered',
+        // Quick replies come only from the server's generator, after its checks.
+        'suggestions.updated',
     ];
 
     private ?Closure $actorResolver = null;
@@ -321,7 +327,8 @@ final class FancyChat
             throw new ChatException('snapshot.at', 422);
         }
         $upTo = $at ?? $last;
-        $state = $checkpoint['state'];
+        // A checkpoint written before a field existed reads it as its empty value (null rather than absent).
+        $state = $checkpoint['state'] + ['suggestions' => null];
         $cursor = $checkpoint['seq'];
         while ($cursor < $upTo) {
             $page = $this->store->after($threadId, $cursor, 1000);
@@ -977,7 +984,159 @@ final class FancyChat
         }
         if ($current === 'settled') {
             $this->dequeueNext($threadId);
+            // After the settle is in the log and announced, and after the next queued
+            // turn is on its way: quick replies can never delay either.
+            $this->offerSuggestions($threadId, $turnId);
         }
+    }
+
+    // ---------------------------------------------------------- quick replies
+
+    /**
+     * Queues quick-reply generation for a turn that just settled `completed`, when
+     * the host enabled it and the backend can suggest. Never throws.
+     */
+    private function offerSuggestions(string $threadId, string $turnId): void
+    {
+        if ($this->cfg('suggestions.enabled', false) !== true || ! $this->backend instanceof SuggestsReplies) {
+            return;
+        }
+        try {
+            if ($this->suggestionTarget($this->snapshot($threadId), $turnId) === null) {
+                return;
+            }
+            $job = new GenerateSuggestions($threadId, $turnId);
+            if ($this->cfg('queue.connection') !== null) {
+                $job->onConnection($this->cfg('queue.connection'));
+            }
+            if ($this->cfg('queue.name') !== null) {
+                $job->onQueue($this->cfg('queue.name'));
+            }
+            $this->app->make(Dispatcher::class)->dispatch($job);
+        } catch (Throwable $e) {
+            $this->report($e);
+        }
+    }
+
+    /**
+     * Generates and appends quick replies for one settled turn (the
+     * GenerateSuggestions job). Off unless `fancy-chat.suggestions.enabled` and the
+     * backend's mode is listed in `fancy-chat.suggestions.modes`. Only the newest
+     * turn, settled `completed`, gets them. The generator's ONLY inputs are the
+     * user's message that started the turn and the agent's last reply in it.
+     *
+     * Never throws and never touches the turn: an error is logged through the
+     * host's exception handler and nothing is appended.
+     */
+    public function generateSuggestions(string $threadId, string $turnId): void
+    {
+        try {
+            $backend = $this->backend;
+            if ($this->cfg('suggestions.enabled', false) !== true || ! $backend instanceof SuggestsReplies) {
+                return;
+            }
+            $mode = $backend->replyMode($threadId);
+            $modes = $this->cfg('suggestions.modes', []);
+            if (! is_string($mode) || ! is_array($modes) || ! in_array($mode, $modes, true)) {
+                return;
+            }
+            $target = $this->suggestionTarget($this->snapshot($threadId), $turnId);
+            if ($target === null) {
+                return;
+            }
+            $maxInput = max(0, (int) $this->cfg('suggestions.max_input_chars', 4000));
+            $maxCount = max(0, (int) $this->cfg('suggestions.max_count', 3));
+            $maxChars = max(0, (int) $this->cfg('suggestions.max_chars', 80));
+            if ($maxCount === 0) {
+                return;
+            }
+            $raw = $backend->suggestReplies(new SuggestionRequest(
+                $threadId,
+                $turnId,
+                $mode,
+                mb_substr($target['user'], 0, $maxInput, 'UTF-8'),
+                mb_substr($target['agent'], 0, $maxInput, 'UTF-8'),
+                $maxCount,
+                $maxChars,
+            ));
+            $items = Suggestions::sanitize($raw, ['maxCount' => $maxCount, 'maxChars' => $maxChars], $this->refusedPhrases());
+            // Generation takes time: a turn that started meanwhile makes these stale.
+            if ($items === [] || $this->suggestionTarget($this->snapshot($threadId), $turnId) === null) {
+                return;
+            }
+            $this->append($threadId, ['type' => 'suggestions.updated', 'turnId' => $turnId, 'data' => ['turnId' => $turnId, 'items' => $items]]);
+        } catch (Throwable $e) {
+            $this->report($e);
+        }
+    }
+
+    /**
+     * The two inputs for a turn, or null when it gets no quick replies: it must be the
+     * newest turn, settled `completed`, with a human message that started it and an
+     * agent reply in it, each with some text.
+     *
+     * @param  array<string, mixed>  $state
+     * @return array{user: string, agent: string}|null
+     */
+    private function suggestionTarget(array $state, string $turnId): ?array
+    {
+        $turns = $state['turns'];
+        $last = $turns === [] ? null : $turns[count($turns) - 1];
+        // An outcome exists only once a turn settled, so `completed` is the whole check.
+        if ($last === null || $last['turnId'] !== $turnId || $last['outcome'] !== 'completed') {
+            return null;
+        }
+        $user = null;
+        $agent = null;
+        foreach ($state['messages'] as $m) {
+            if ($m['retracted'] || $m['superseded']) {
+                continue;
+            }
+            if ($m['id'] === $last['messageId'] && ($m['author']['kind'] ?? null) === 'human') {
+                $user = self::textOf($m['parts']);
+            } elseif ($m['turnId'] === $turnId && ($m['author']['kind'] ?? null) === 'agent') {
+                $agent = self::textOf($m['parts']);
+            }
+        }
+
+        return is_string($user) && trim($user) !== '' && is_string($agent) && trim($agent) !== '' ? ['user' => $user, 'agent' => $agent] : null;
+    }
+
+    /** @param  list<array<string, mixed>>  $parts */
+    private static function textOf(array $parts): string
+    {
+        $texts = [];
+        foreach ($parts as $part) {
+            if (($part['kind'] ?? null) === 'text' && is_string($part['text'] ?? null)) {
+                $texts[] = $part['text'];
+            }
+        }
+
+        return implode("\n\n", $texts);
+    }
+
+    /**
+     * Phrases a suggestion may never be: every typed-approval phrase, the English
+     * set and any the host configured in any locale, whether or not typed approval
+     * is on, so a pick can never read as a decision.
+     *
+     * @return list<string>
+     */
+    private function refusedPhrases(): array
+    {
+        $out = [...TypedApproval::ENGLISH['approve'], ...TypedApproval::ENGLISH['reject']];
+        $phrases = $this->cfg('typed_approval.phrases', []);
+        foreach (is_array($phrases) ? $phrases : [] as $lists) {
+            foreach (is_array($lists) ? $lists : [] as $list) {
+                foreach (is_array($list) ? $list : [] as $phrase) {
+                    if (is_string($phrase)) {
+                        $out[] = $phrase;
+                    }
+                }
+            }
+        }
+
+        return $out;
     }
 
     /**

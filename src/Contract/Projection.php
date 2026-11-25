@@ -19,7 +19,7 @@ final class Projection
     /** @return array<string, mixed> */
     public static function emptyState(): array
     {
-        return ['lastSeq' => 0, 'illegal' => 0, 'order' => [], 'messages' => [], 'turns' => [], 'thinking' => [], 'tools' => [], 'plans' => [], 'approvals' => [], 'questions' => [], 'undos' => [], 'branches' => []];
+        return ['lastSeq' => 0, 'illegal' => 0, 'order' => [], 'messages' => [], 'turns' => [], 'thinking' => [], 'tools' => [], 'plans' => [], 'approvals' => [], 'questions' => [], 'undos' => [], 'branches' => [], 'suggestions' => null];
     }
 
     /** @param  list<array<string, mixed>>  $list */
@@ -314,6 +314,8 @@ final class Projection
                 if ($origin !== null && $state['messages'][$origin]['turnId'] === null) {
                     $state['messages'][$origin]['turnId'] = $data['turnId'];
                 }
+                // Quick replies belong to the turn they follow; a new turn retires them.
+                $state['suggestions'] = null;
                 break;
 
             case 'turn.transition':
@@ -428,6 +430,25 @@ final class Projection
                     break;
                 }
                 $state['undos'][$i]['state'] = $type === 'undo.committed' ? 'committed' : 'reverted';
+                break;
+
+            case 'suggestions.updated':
+                // Only for the NEWEST turn, settled completed, and never from a human:
+                // a suggestion is offered to the person, never set by one.
+                $last = $state['turns'] === [] ? null : $state['turns'][count($state['turns']) - 1];
+                $checked = Suggestions::checkItems($data['items'] ?? null);
+                if (
+                    ($event['actor']['kind'] ?? null) === 'human'
+                    || ! is_string($data['turnId'] ?? null)
+                    || $last === null
+                    || $last['turnId'] !== $data['turnId']
+                    || $last['outcome'] !== 'completed'
+                    || ! $checked['ok']
+                ) {
+                    $illegal();
+                    break;
+                }
+                $state['suggestions'] = $checked['items'] === [] ? null : ['turnId' => $data['turnId'], 'items' => $checked['items']];
                 break;
 
             default:
@@ -550,7 +571,7 @@ final class Projection
      *
      * @param  list<array<string, mixed>>  $events
      * @param  array<string, mixed>|null  $initial
-     * @return array{lastSeq: int, illegal: int, rows: list<array<string, mixed>>, turns: list<array<string, mixed>>, approvals: list<array<string, mixed>>, questions: list<array<string, mixed>>, state: array<string, mixed>}
+     * @return array{lastSeq: int, illegal: int, rows: list<array<string, mixed>>, turns: list<array<string, mixed>>, approvals: list<array<string, mixed>>, questions: list<array<string, mixed>>, suggestions: array{turnId: string, items: list<array{id: string, text: string}>}|null, state: array<string, mixed>}
      */
     public static function project(array $events, ?array $initial = null): array
     {
@@ -566,6 +587,7 @@ final class Projection
             'turns' => $state['turns'],
             'approvals' => $state['approvals'],
             'questions' => $state['questions'],
+            'suggestions' => $state['suggestions'] ?? null,
             'state' => $state,
         ];
     }

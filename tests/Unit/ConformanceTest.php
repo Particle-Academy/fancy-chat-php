@@ -9,6 +9,7 @@ use FancyChat\Contract\Parts;
 use FancyChat\Contract\Plan;
 use FancyChat\Contract\Projection;
 use FancyChat\Contract\Status;
+use FancyChat\Contract\Suggestions;
 use FancyChat\Contract\TypedApproval;
 use FancyChat\Contract\Undo;
 use FancyChat\Tests\Support\Fixtures;
@@ -37,7 +38,7 @@ it('runs every section that names the php leg', function (): void {
         }
     }
     sort($php);
-    expect($php)->toBe(['actionable', 'approval', 'branchTurns', 'decide', 'delivery', 'envelope', 'optionTone', 'parts', 'planStep', 'projection', 'question', 'reservedTools', 'status', 'turn', 'typedApproval', 'undo']);
+    expect($php)->toBe(['actionable', 'approval', 'branchTurns', 'decide', 'delivery', 'envelope', 'optionTone', 'parts', 'planStep', 'projection', 'question', 'reservedTools', 'status', 'suggestions', 'turn', 'typedApproval', 'undo']);
 });
 
 it('validates the envelope', function (array $c): void {
@@ -154,6 +155,34 @@ it('keeps typed approval off, with no phrases, until the host turns it on', func
         ->and(TypedApproval::match('approve', $approval, ['enabled' => true]))->toBeNull()
         ->and(TypedApproval::match('approve', $approval, ['enabled' => true, 'phrases' => ['en' => ['approve' => ['approve']]]]))->toBe(['optionId' => 'o', 'decision' => 'approve'])
         ->and(TypedApproval::ENGLISH)->toBe(['approve' => ['approve', 'yes, approve'], 'reject' => ['reject', 'no, reject']]);
+});
+
+it('projects quick replies onto the one settled turn they follow', function (array $c): void {
+    $section = Fixtures::section('suggestions');
+    $defaults = Fixtures::section('projection')['defaults'];
+    $events = array_map(fn (array $e): array => array_merge($defaults, $e), [...$section['base'], ...$c['events']]);
+    $p = Projection::project($events);
+    expect(canon(['illegal' => $p['illegal'], 'suggestions' => $p['suggestions']]))->toBe(canon($c['expect']))
+        ->and(canon($p['state']['suggestions']))->toBe(canon($c['expect']['suggestions']));
+})->with(Fixtures::cases('suggestions', fn (array $c): string => $c['name']));
+
+it('sanitizes quick replies as the JS leg does', function (array $c): void {
+    $section = Fixtures::section('suggestions');
+    expect(Suggestions::sanitize($c['input'], $c['limits'] ?? $section['limits'], $c['refuse'] ?? []))->toBe($c['expect']);
+})->with((function (): array {
+    $out = [];
+    foreach (Fixtures::section('suggestions')['sanitize'] as $i => $c) {
+        $out[$i.': '.$c['name']] = [$c];
+    }
+
+    return $out;
+})());
+
+it('starts with no quick replies, a field always present', function (): void {
+    expect(Projection::emptyState())->toHaveKey('suggestions')
+        ->and(Projection::emptyState()['suggestions'])->toBeNull()
+        ->and(Envelope::isEventType('suggestions.updated'))->toBeTrue()
+        ->and(Suggestions::DEFAULT_LIMITS)->toBe(['maxCount' => 3, 'maxChars' => 80]);
 });
 
 it('defaults undos and branches when a snapshot omits them', function (): void {

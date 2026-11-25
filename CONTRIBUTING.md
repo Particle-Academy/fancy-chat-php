@@ -93,6 +93,16 @@ v1. prism-graph is optional (`src/Prism/KnowledgeBridge.php`, `available()`).
     replays them). A new knowledge route is a controller method plus a `serve()` arm,
     never a closure.
 
+23. **Quick replies never act and never touch the turn.** `generateSuggestions` runs
+    only from the `GenerateSuggestions` job, dispatched after `dequeueNext`; it reads
+    only the turn's starting human message and the agent's last reply in it
+    (`suggestionTarget`), sanitises through `Contract\Suggestions` (refusing every
+    typed-approval phrase), rechecks the turn is still the newest before appending,
+    and catches every error into `report()`. `suggestions.updated` is in
+    `BACKEND_FORBIDDEN`. `HarnessBackend::suggestReplies` is one Prism text call with
+    no tools and no session, its inputs JSON-encoded with `JSON_HEX_TAG` inside the
+    data block.
+
 ## Known limits
 
 - The snapshot is a fold of the checkpoint plus retained events on every call.

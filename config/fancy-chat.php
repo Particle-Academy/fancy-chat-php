@@ -72,6 +72,34 @@ return [
         'phrases' => [],
     ],
 
+    /*
+     * Quick replies (CC-fancy-0065): a few short next messages under the agent's
+     * reply, generated after a turn settles `completed` from the user's last
+     * message and that reply ONLY, on your configured model. OFF by default and
+     * switched on per mode, because each one is an extra model call you pay for.
+     * Never generated for a turn that parked, failed, was refused or cancelled.
+     * A generation error is logged and emits nothing; it never fails or delays
+     * the turn. The output is held to plain text and to the limits below, and a
+     * pick is only ever an ordinary human message.
+     */
+    'suggestions' => [
+        'enabled' => false,
+        /* The agent modes (Prism Harness modes) that get them. Empty: none. */
+        'modes' => [],
+        /* Suggestions kept per turn. */
+        'max_count' => 3,
+        /* Characters in one suggestion; a longer one is dropped, never cut. */
+        'max_chars' => 80,
+        /* Characters of each input (the user's message, the agent's reply) sent to the model. */
+        'max_input_chars' => 4000,
+        /* Output tokens the generator may spend, and seconds it may take. */
+        'max_output_tokens' => 256,
+        'timeout_seconds' => 15,
+        /* Null: the agent's own provider and model. Set both to use a smaller one. */
+        'provider' => null,
+        'model' => null,
+    ],
+
     'undo' => [
         /* The window when openUndo() is given none. The host picks one per action. */
         'default_ms' => 30000,
